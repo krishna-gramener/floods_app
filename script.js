@@ -1,7 +1,9 @@
 // Import authentication module and utilities
 import { authenticate } from './auth.js';
-import { createOpacitySlider, updateOpacitySlider, removeOpacitySlider, hideLoading } from './utils.js';
-import { addLayerToLeftMap, addLayerToRightMap } from './comparison-layers.js';
+import { hideLoading, updateStatus } from './utils.js';
+import { initLayerManager} from './layers.js';
+import { initMapControls, initMap, toggleComparisonView, toggleComparisonFullscreen} from './map-controls.js';
+import { bekasiBounds, bekasiAreas } from './config.js';
 
 // Global variables
 let map;
@@ -10,126 +12,8 @@ let mapRight;
 let layers = {};
 let layersLeft = {};
 let layersRight = {};
-let legend;
+let overlays = {};
 let isComparisonMode = false;
-
-// Bekasi boundaries (coordinates from besaki.js)
-const bekasiBounds = {
-  bounds: [[-6.45, 106.88], [-6.10, 107.15]],
-  center: [-6.275, 107.015]
-};
-
-// Key Bekasi sub-areas (from besaki.js)
-const bekasiAreas = {
-  'Bekasi Barat': [106.977, -6.217],
-  'Bekasi Timur': [107.010, -6.226],
-  'Bekasi Selatan': [106.995, -6.289],
-  'Bekasi Utara': [106.987, -6.167],
-  'Medan Satria': [106.943, -6.248],
-  'Jatiasih': [106.990, -6.324],
-  'Jatisampurna': [106.996, -6.242],
-  'Mustika Jaya': [107.004, -6.203],
-  'Bantar Gebang': [107.039, -6.213],
-  'Rawalumbu': [106.986, -6.270],
-  'Pondok Gede': [107.083, -6.301]
-};
-
-/**
- * Show DEM layer on a specific map
- * @param {L.Map} targetMap - The map to add the layer to
- * @param {Object} layerCollection - The collection to store the layer in
- * @param {string} layerName - The name for the layer
- */
-function showDEMOnMap(targetMap, layerCollection, layerName) {
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
-  
-  // Get DEM data
-  const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
-  
-  // Visualization parameters
-  const demVis = {
-    min: 0,
-    max: 50,
-    palette: ['#253494', '#2c7fb8', '#41b6c4', '#a1dab4', '#ffffcc'],
-    opacity: 0.7
-  };
-  
-  // Add the layer to the map
-  addLayerToMap(targetMap, layerCollection, dem, demVis, layerName);
-}
-
-/**
- * Show Population layer on a specific map
- * @param {L.Map} targetMap - The map to add the layer to
- * @param {Object} layerCollection - The collection to store the layer in
- * @param {string} layerName - The name for the layer
- */
-function showPopulationOnMap(targetMap, layerCollection, layerName) {
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
-  
-  // Get population data
-  const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
-    .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
-    .first()
-    .clip(bekasiGeometry);
-  
-  // Visualization parameters
-  const popVis = {
-    min: 0,
-    max: 5000,
-    palette: ['white', 'yellow', 'orange', 'red'],
-    opacity: 0.7
-  };
-  
-  // Add the layer to the map
-  addLayerToMap(targetMap, layerCollection, population, popVis, layerName);
-}
-
-/**
- * Generic function to add an Earth Engine layer to a specific map
- * @param {L.Map} targetMap - The map to add the layer to
- * @param {Object} layerCollection - The collection to store the layer in
- * @param {ee.Image} eeObject - The Earth Engine object to add
- * @param {Object} visParams - Visualization parameters
- * @param {string} name - The name for the layer
- */
-function addLayerToMap(targetMap, layerCollection, eeObject, visParams, name) {
-  try {
-    eeObject.getMap(visParams, function(tileLayer) {
-      console.log(`Layer created for map: ${name}`, tileLayer);
-      
-      // Remove existing layer with same name if it exists
-      if (layerCollection[name]) {
-        targetMap.removeLayer(layerCollection[name]);
-      }
-      
-      // Use opacity from visParams if provided, otherwise default to 0.7
-      const opacity = visParams.opacity !== undefined ? visParams.opacity : 0.7;
-      
-      // Create Leaflet tile layer using the URL from Earth Engine
-      var eeLayer = L.tileLayer(tileLayer.urlFormat, {
-        attribution: "Google Earth Engine",
-        opacity: opacity,
-        zIndex: 10 // Ensure Earth Engine layers are always on top of base maps
-      });
-      
-      // Store layer reference
-      layerCollection[name] = eeLayer;
-      
-      // Add to map
-      eeLayer.addTo(targetMap);
-      
-      // Create opacity slider for this layer
-      addOpacitySliderToMap(targetMap, eeLayer, name);
-      
-      console.log(`${name} layer added to map`);
-    });
-  } catch (e) {
-    console.error(`Error processing ${name} for map:`, e);
-  }
-}
 
 /**
  * Add opacity slider to a specific map for a layer
@@ -139,11 +23,22 @@ function addLayerToMap(targetMap, layerCollection, eeObject, visParams, name) {
  */
 function addOpacitySliderToMap(targetMap, layer, layerName) {
   // Create a unique ID for the slider based on the map and layer
-  const mapId = targetMap === map ? 'main' : (targetMap === mapLeft ? 'left' : 'right');
-  const buttonId = `opacity-button-${mapId}-${layerName.replace(/\s+/g, '-').toLowerCase()}`;
+  let mapId;
+  if (targetMap === map) {
+    mapId = 'main';
+  } else if (targetMap._container && targetMap._container.id === 'map-left') {
+    mapId = 'left';
+  } else if (targetMap._container && targetMap._container.id === 'map-right') {
+    mapId = 'right';
+  } else {
+    console.error('Unknown map container');
+    return; // Exit if we can't identify the map
+  }
+  
+  const sliderId = `opacity-button-${mapId}-${layerName.replace(/\s+/g, '-').toLowerCase()}`;
   
   // Check if button already exists and remove it
-  const existingButton = document.getElementById(buttonId);
+  const existingButton = document.getElementById(sliderId);
   if (existingButton) {
     existingButton.remove();
   }
@@ -158,12 +53,19 @@ function addOpacitySliderToMap(targetMap, layer, layerName) {
     opacityControlsContainer.style.top = '10px';
     opacityControlsContainer.style.right = '50px'; // Position to the left of the layer control
     opacityControlsContainer.style.zIndex = '1000';
-    targetMap.getContainer().appendChild(opacityControlsContainer);
+    
+    // Make sure we have the container
+    if (targetMap._container) {
+      targetMap._container.appendChild(opacityControlsContainer);
+    } else {
+      console.error('Map container not found');
+      return;
+    }
   }
   
   // Create the opacity button
   const buttonDiv = document.createElement('div');
-  buttonDiv.id = buttonId;
+  buttonDiv.id = sliderId;
   buttonDiv.className = 'opacity-button-control';
   buttonDiv.style.backgroundColor = 'white';
   buttonDiv.style.padding = '5px';
@@ -205,6 +107,16 @@ function addOpacitySliderToMap(targetMap, layer, layerName) {
       sliderPanel.style.width = '200px';
       sliderPanel.setAttribute('data-map-id', mapId);
       sliderPanel.setAttribute('data-layer-name', layerName);
+      
+      // Get the correct container based on mapId
+      let container;
+      if (mapId === 'main') {
+        container = document.getElementById('map');
+      } else if (mapId === 'left') {
+        container = document.getElementById('map-left');
+      } else if (mapId === 'right') {
+        container = document.getElementById('map-right');
+      }
       
       // Create panel header
       const header = document.createElement('div');
@@ -273,31 +185,18 @@ function addOpacitySliderToMap(targetMap, layer, layerName) {
       });
       
       // Add to map container
-      targetMap.getContainer().appendChild(sliderPanel);
+      if (container) {
+        container.appendChild(sliderPanel);
+      } else if (targetMap._container) {
+        targetMap._container.appendChild(sliderPanel);
+      } else {
+        console.error('Could not find container for opacity slider panel');
+      }
     }
   });
   
   // Add the button to the container
   opacityControlsContainer.appendChild(buttonDiv);
-}
-
-/**
- * Remove all opacity sliders from a specific map
- * @param {string} mapId - The map ID ('main', 'left', or 'right')
- */
-function removeAllOpacitySliders(mapId) {
-  // Find all opacity controls for the specified map
-  const controls = document.querySelectorAll(`.opacity-control[data-map-id="${mapId}"]`);
-  
-  // Remove each control
-  controls.forEach(control => {
-    if (control && control.parentElement) {
-      // Make sure we're not removing a coordinates control
-      if (!control.classList.contains(`coordinates-control-${mapId}`)) {
-        control.parentElement.remove();
-      }
-    }
-  });
 }
 
 /**
@@ -322,27 +221,27 @@ function removeOpacitySliderForLayer(mapId, layerName) {
 }
 
 /**
- * Refresh all layers on the main map
- * This ensures layers are properly displayed after switching back from comparison view
+ * Remove all opacity sliders from a specific map
+ * @param {string} mapId - The map ID ('main', 'left', or 'right')
  */
-function refreshMainMapLayers() {
-  // Get all active layers
-  Object.keys(layers).forEach(layerName => {
-    const layer = layers[layerName];
-    
-    // If the layer exists, refresh it
-    if (layer) {
-      // Temporarily remove and re-add the layer to refresh it
-      if (map.hasLayer(layer)) {
-        map.removeLayer(layer);
-        layer.addTo(map);
-        
-        // Re-add the opacity slider
-        addOpacitySliderToMap(map, layer, layerName);
-      }
+function removeAllOpacitySliders(mapId) {
+  // Find all opacity controls for the specified map
+  const container = document.getElementById(`opacity-controls-${mapId}`);
+  if (container) {
+    // Remove all buttons in the container
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
     }
+  }
+  
+  // Find and remove all opacity panels for this map
+  const panels = document.querySelectorAll(`.opacity-panel[data-map-id="${mapId}"]`);
+  panels.forEach(panel => {
+    panel.remove();
   });
 }
+
+// Note: refreshMainMapLayers function moved to layers.js
 
 // Initialize the application when the page loads
 document.addEventListener('DOMContentLoaded', function() {
@@ -375,204 +274,17 @@ function initApp() {
   console.log('User initialized successfully');
   
   // Initialize the map
-  initMap();
+  map = initMap();
   
-  // Add base layers
-  addBaseLayers();
+  // Initialize the layer manager with map references and opacity slider function
+  initLayerManager(map, layers, mapLeft, layersLeft, mapRight, layersRight, addOpacitySliderToMap);
   
-  // Check the elevation checkbox since that layer is loaded by default
-//   document.getElementById('chkElevation').checked = true;
+  // Initialize the map controls with references and opacity slider functions - after map is created
+  initMapControls(map, layers, overlays, mapLeft, layersLeft, mapRight, layersRight, bekasiBounds, isComparisonMode, 
+    removeOpacitySliderForLayer, removeAllOpacitySliders);
   
   // Hide loading overlay
   hideLoading();
-}
-
-// Add base layers to the map
-function addBaseLayers() {
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
-  
-  // Add DEM layer (visible by default like in demo.js)
-  const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
-  addLayer(dem, {
-    min: 0, 
-    max: 50, 
-    palette: ['#253494', '#2c7fb8', '#41b6c4', '#a1dab4', '#ffffcc'],
-    opacity: 0.7
-  }, 'Bekasi Elevation', false);
-  
-  // Also add population layer (hidden by default)
-  const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
-    .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
-    .first()
-    .clip(bekasiGeometry);
-    
-  addLayer(population, {
-    min: 0,
-    max: 5000,
-    palette: ['white', 'yellow', 'orange', 'red'],
-    opacity: 0.7
-  }, 'Population Density', false);
-  
-  // Create default legend
-  createLegend('Elevation', 
-    ['#253494', '#2c7fb8', '#41b6c4', '#a1dab4', '#ffffcc'], 
-    ['0m', '10m', '20m', '30m', '50m']);
-}
-
-// Global variables for base layers and overlays
-let baseMaps = {};
-let overlays = {};
-
-// Initialize the Leaflet map
-function initMap() {
-  // Create a Leaflet map centered on Bekasi with fullscreen control
-  map = L.map('map', {
-    fullscreenControl: true,
-    fullscreenControlOptions: {
-      position: 'topleft',
-      title: 'View Fullscreen',
-      titleCancel: 'Exit Fullscreen'
-    }
-  }).setView(bekasiBounds.center, 11);
-  
-  // Create base layers
-  // Normal map (OpenStreetMap)
-  baseMaps["Normal"] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  });
-  
-  // Satellite map (ESRI World Imagery)
-  baseMaps["Satellite"] = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-  });
-  
-  // Add the normal map as default
-  baseMaps["Normal"].addTo(map);
-  
-  // Add Bekasi boundary
-  L.rectangle(bekasiBounds.bounds, {
-    color: 'black',
-    weight: 2,
-    fillOpacity: 0,
-  }).addTo(map).bindPopup('Bekasi Study Area');
-  
-  // Add layer control for base maps and overlays
-  const layerControl = L.control.layers(baseMaps, {}, {
-    position: 'topright',
-    collapsed: false
-  }).addTo(map);
-  
-  // Add data layers to the control
-  layerControl.addOverlay(createDummyLayer(), 'Elevation');
-  layerControl.addOverlay(createDummyLayer(), 'Population');
-  
-  // Add event listeners for main map overlay checkboxes
-  map.on('overlayadd', function(e) {
-    const layerName = e.name;
-    console.log(`Layer added to main map: ${layerName}`);
-    
-    if (layerName === 'Elevation') {
-      showDEM();
-    } else if (layerName === 'Population') {
-      showPopulation();
-    }
-  });
-  
-  map.on('overlayremove', function(e) {
-    const layerName = e.name;
-    console.log(`Layer removed from main map: ${layerName}`);
-    
-    if (layerName === 'Elevation') {
-      clearLayer('Elevation');
-      removeOpacitySliderForLayer('main', 'Elevation');
-    } else if (layerName === 'Population') {
-      clearLayer('Population');
-      removeOpacitySliderForLayer('main', 'Population');
-    }
-  });
-  
-  
-  // Add custom coordinates display to bottom left
-  addCoordinatesDisplay(map, 'bottomleft');
-  
-  // Handle base map changes to ensure overlays remain visible
-  map.on('baselayerchange', function(e) {
-    console.log('Base layer changed to:', e.name);
-    
-    // Re-add all active overlays to ensure they're on top of the new base layer
-    Object.keys(overlays).forEach(function(layerName) {
-      if (map.hasLayer(overlays[layerName])) {
-        overlays[layerName].bringToFront();
-      }
-    });
-  });
-  
-  // Create legend control
-  legend = L.control({position: 'bottomright'});
-  legend.onAdd = function() {
-    const div = L.DomUtil.create('div', 'legend');
-    div.innerHTML = '<div id="legend-content"></div>';
-    return div;
-  };
-  legend.addTo(map);
-  
-  updateStatus('Map initialized. Click a button to load data.');
-}
-
-// Show Digital Elevation Model (DEM)
-function showDEM() {
-  updateStatus('Loading elevation data...');
-  
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
-  
-  // Get DEM data
-  const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
-  
-  // Visualization parameters (same as floods.js)
-  const demVis = {
-    min: 0,
-    max: 50,
-    palette: ['#253494', '#2c7fb8', '#41b6c4', '#a1dab4', '#ffffcc']
-  };
-  
-  // Add the layer to the map
-  addLayer(dem, demVis, 'Elevation');
-  
-  // Update legend
-  createLegend('Elevation', 
-    ['#253494', '#2c7fb8', '#41b6c4', '#a1dab4', '#ffffcc'],
-    ['0m', '10m', '20m', '30m', '50m']);
-}
-
-// Show Population Data
-function showPopulation() {
-  updateStatus('Loading population data...');
-  
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
-  
-  // Get population data
-  const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
-    .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
-    .first()
-    .clip(bekasiGeometry);
-  
-  // Visualization parameters (same as floods.js)
-  const popVis = {
-    min: 0,
-    max: 5000,
-    palette: ['white', 'yellow', 'orange', 'red']
-  };
-  
-  // Add the layer to the map
-  addLayer(population, popVis, 'Population');
-  
-  // Update legend
-  createLegend('Population Density', 
-    ['white', 'yellow', 'orange', 'red'],
-    ['Low', 'Medium', 'High', 'Very High']);
 }
 
 // // Show Water Occurrence
@@ -604,141 +316,141 @@ function showPopulation() {
 // }
 
 // Calculate flood risk for a specific area (adapted from besaki.js)
-function calculateFloodRisk(area, coords) {
-  const point = ee.Geometry.Point(coords);
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
+// function calculateFloodRisk(area, coords) {
+//   const point = ee.Geometry.Point(coords);
+//   const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
   
-  // Get datasets (same as besaki.js)
-  const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
-  const jrcWater = ee.Image("JRC/GSW1_4/GlobalSurfaceWater")
-    .select('occurrence')
-    .clip(bekasiGeometry);
-  const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
-    .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
-    .first()
-    .clip(bekasiGeometry);
+//   // Get datasets (same as besaki.js)
+//   const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
+//   const jrcWater = ee.Image("JRC/GSW1_4/GlobalSurfaceWater")
+//     .select('occurrence')
+//     .clip(bekasiGeometry);
+//   const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
+//     .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
+//     .first()
+//     .clip(bekasiGeometry);
   
-  // Sample all data at the point
-  const samples = ee.Image.cat([
-    dem.rename('elevation'),
-    jrcWater.rename('waterOccurrence'),
-    population.rename('population'),
-    ee.Terrain.slope(dem).rename('slope')
-  ]).sample(point, 30);
+//   // Sample all data at the point
+//   const samples = ee.Image.cat([
+//     dem.rename('elevation'),
+//     jrcWater.rename('waterOccurrence'),
+//     population.rename('population'),
+//     ee.Terrain.slope(dem).rename('slope')
+//   ]).sample(point, 30);
   
-  // Return a promise that will resolve with the risk data
-  return new Promise((resolve, reject) => {
-    samples.evaluate((result, error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
+//   // Return a promise that will resolve with the risk data
+//   return new Promise((resolve, reject) => {
+//     samples.evaluate((result, error) => {
+//       if (error) {
+//         reject(error);
+//         return;
+//       }
       
-      // Handle null or incomplete result
-      if (!result || !result.features || result.features.length === 0) {
-        // Instead of using dummy values, calculate risk based on location
-        // Areas closer to the coast and lower latitude tend to be more flood-prone
-        const longitude = coords[0];
-        const latitude = coords[1];
+//       // Handle null or incomplete result
+//       if (!result || !result.features || result.features.length === 0) {
+//         // Instead of using dummy values, calculate risk based on location
+//         // Areas closer to the coast and lower latitude tend to be more flood-prone
+//         const longitude = coords[0];
+//         const latitude = coords[1];
         
-        // Calculate estimated values based on location
-        // Lower elevation for areas closer to the coast (eastern bekasi)
-        const estimatedElevation = Math.max(2, 20 - ((longitude - 80.0) * 100));
+//         // Calculate estimated values based on location
+//         // Lower elevation for areas closer to the coast (eastern bekasi)
+//         const estimatedElevation = Math.max(2, 20 - ((longitude - 80.0) * 100));
         
-        // Higher water occurrence for areas closer to the coast and water bodies
-        const estimatedWaterOcc = Math.min(80, ((longitude - 80.0) * 200) + ((13.1 - latitude) * 100));
+//         // Higher water occurrence for areas closer to the coast and water bodies
+//         const estimatedWaterOcc = Math.min(80, ((longitude - 80.0) * 200) + ((13.1 - latitude) * 100));
         
-        // Population density varies but is generally higher in central bekasi
-        const centralityFactor = 1 - (Math.abs(longitude - 80.22) + Math.abs(latitude - 13.05)) * 5;
-        const estimatedPopulation = Math.max(500, centralityFactor * 5000);
+//         // Population density varies but is generally higher in central bekasi
+//         const centralityFactor = 1 - (Math.abs(longitude - 80.22) + Math.abs(latitude - 13.05)) * 5;
+//         const estimatedPopulation = Math.max(500, centralityFactor * 5000);
         
-        // Slope is generally low in bekasi
-        const estimatedSlope = Math.max(1, 5 - ((longitude - 80.0) * 10));
+//         // Slope is generally low in bekasi
+//         const estimatedSlope = Math.max(1, 5 - ((longitude - 80.0) * 10));
         
-        // For estimated values, use JavaScript calculations directly instead of Earth Engine objects
-        // This avoids the need for evaluation which can cause errors
-        const elevationScore = Math.abs((estimatedElevation / 50) - 1) * 25;
-        const slopeScore = Math.abs((estimatedSlope / 10) - 1) * 20;
-        const popScore = (estimatedPopulation / 1000) * 25;
-        const waterScore = (estimatedWaterOcc / 100) * 30;
+//         // For estimated values, use JavaScript calculations directly instead of Earth Engine objects
+//         // This avoids the need for evaluation which can cause errors
+//         const elevationScore = Math.abs((estimatedElevation / 50) - 1) * 25;
+//         const slopeScore = Math.abs((estimatedSlope / 10) - 1) * 20;
+//         const popScore = (estimatedPopulation / 1000) * 25;
+//         const waterScore = (estimatedWaterOcc / 100) * 30;
         
-        // Sum all scores using JavaScript operations
-        const totalScore = elevationScore + slopeScore + popScore + waterScore;
+//         // Sum all scores using JavaScript operations
+//         const totalScore = elevationScore + slopeScore + popScore + waterScore;
         
-        resolve({
-          area: area,
-          coordinates: coords,
-          riskScore: totalScore, // This is now a JavaScript number
-          elevation: estimatedElevation,
-          population: estimatedPopulation,
-          waterOccurrence: estimatedWaterOcc,
-          slope: estimatedSlope,
-          estimated: true // Flag to indicate these are estimated values
-        });
-        return;
-      }
+//         resolve({
+//           area: area,
+//           coordinates: coords,
+//           riskScore: totalScore, // This is now a JavaScript number
+//           elevation: estimatedElevation,
+//           population: estimatedPopulation,
+//           waterOccurrence: estimatedWaterOcc,
+//           slope: estimatedSlope,
+//           estimated: true // Flag to indicate these are estimated values
+//         });
+//         return;
+//       }
       
-      // Extract values from the result
-      const properties = result.features[0].properties;
-      const elevation = properties.elevation || 0;
-      const waterOccurrence = properties.waterOccurrence || 0;
-      const population = properties.population || 0;
-      const slope = properties.slope || 0;
+//       // Extract values from the result
+//       const properties = result.features[0].properties;
+//       const elevation = properties.elevation || 0;
+//       const waterOccurrence = properties.waterOccurrence || 0;
+//       const population = properties.population || 0;
+//       const slope = properties.slope || 0;
       
-      // Calculate risk score (0-100) exactly as in floods.js
-      // Using ee.Number for Earth Engine calculations
-      const elevationScore = ee.Number(elevation).divide(50).subtract(1).abs().multiply(25);
-      const slopeScore = ee.Number(slope).divide(10).subtract(1).abs().multiply(20);
-      const popScore = ee.Number(population).divide(1000).multiply(25);
-      const waterScore = ee.Number(waterOccurrence).divide(100).multiply(30);
+//       // Calculate risk score (0-100) exactly as in floods.js
+//       // Using ee.Number for Earth Engine calculations
+//       const elevationScore = ee.Number(elevation).divide(50).subtract(1).abs().multiply(25);
+//       const slopeScore = ee.Number(slope).divide(10).subtract(1).abs().multiply(20);
+//       const popScore = ee.Number(population).divide(1000).multiply(25);
+//       const waterScore = ee.Number(waterOccurrence).divide(100).multiply(30);
       
-      // Sum all scores
-      const totalScore = elevationScore.add(slopeScore).add(popScore).add(waterScore);
+//       // Sum all scores
+//       const totalScore = elevationScore.add(slopeScore).add(popScore).add(waterScore);
       
-      // We need to evaluate the Earth Engine objects to get JavaScript values for use in the UI
-      elevationScore.evaluate((elevValue) => {
-        slopeScore.evaluate((slopeValue) => {
-          popScore.evaluate((popValue) => {
-            waterScore.evaluate((waterValue) => {
-              totalScore.evaluate((riskScoreValue, error) => {
-                if (error) {
-                  console.error('Error evaluating risk score:', error);
-                  // Fallback to a calculated estimate if evaluation fails
-                  const jsElevationScore = Math.abs((elevation / 50) - 1) * 25;
-                  const jsSlopeScore = Math.abs((slope / 10) - 1) * 20;
-                  const jsPopScore = (population / 1000) * 25;
-                  const jsWaterScore = (waterOccurrence / 100) * 30;
-                  const jsTotalScore = jsElevationScore + jsSlopeScore + jsPopScore + jsWaterScore;
+//       // We need to evaluate the Earth Engine objects to get JavaScript values for use in the UI
+//       elevationScore.evaluate((elevValue) => {
+//         slopeScore.evaluate((slopeValue) => {
+//           popScore.evaluate((popValue) => {
+//             waterScore.evaluate((waterValue) => {
+//               totalScore.evaluate((riskScoreValue, error) => {
+//                 if (error) {
+//                   console.error('Error evaluating risk score:', error);
+//                   // Fallback to a calculated estimate if evaluation fails
+//                   const jsElevationScore = Math.abs((elevation / 50) - 1) * 25;
+//                   const jsSlopeScore = Math.abs((slope / 10) - 1) * 20;
+//                   const jsPopScore = (population / 1000) * 25;
+//                   const jsWaterScore = (waterOccurrence / 100) * 30;
+//                   const jsTotalScore = jsElevationScore + jsSlopeScore + jsPopScore + jsWaterScore;
                   
-                  resolve({
-                    area: area,
-                    coordinates: coords,
-                    riskScore: jsTotalScore,
-                    elevation: elevation,
-                    population: population,
-                    waterOccurrence: waterOccurrence,
-                    slope: slope
-                  });
-                } else {
-                  // Use the evaluated JavaScript values
-                  resolve({
-                    area: area,
-                    coordinates: coords,
-                    riskScore: riskScoreValue,
-                    elevation: elevation,
-                    population: population,
-                    waterOccurrence: waterOccurrence,
-                    slope: slope
-                  });
-                }
-              });
-            });
-          });
-        });
-      });
-    });
-  });
-}
+//                   resolve({
+//                     area: area,
+//                     coordinates: coords,
+//                     riskScore: jsTotalScore,
+//                     elevation: elevation,
+//                     population: population,
+//                     waterOccurrence: waterOccurrence,
+//                     slope: slope
+//                   });
+//                 } else {
+//                   // Use the evaluated JavaScript values
+//                   resolve({
+//                     area: area,
+//                     coordinates: coords,
+//                     riskScore: riskScoreValue,
+//                     elevation: elevation,
+//                     population: population,
+//                     waterOccurrence: waterOccurrence,
+//                     slope: slope
+//                   });
+//                 }
+//               });
+//             });
+//           });
+//         });
+//       });
+//     });
+//   });
+// }
 
 // // Show Risk Zones
 // function showRiskZones() {
@@ -885,421 +597,24 @@ function calculateFloodRisk(area, coords) {
 //   updateStatus(`Risk analysis completed for ${Object.keys(bekasiAreas).length} areas.`);
 // }
 
-// Add a layer to the map (using the exact approach from demo.js)
-function addLayer(eeObject, visParams, name, visible = true) {
-  updateStatus(`Processing ${name} data...`);
-  try {
-    eeObject.getMap(visParams, function(tileLayer) {
-      console.log('Layer created:', name, tileLayer);
-      
-      // Remove existing layer with same name if it exists
-      if (layers[name]) {
-        map.removeLayer(layers[name]);
-        
-        // Remove existing opacity slider if it exists
-        const sliderId = `opacity-main-${name.replace(/\s+/g, '-').toLowerCase()}`;
-        const existingSlider = document.getElementById(sliderId);
-        if (existingSlider && existingSlider.parentElement && existingSlider.parentElement.parentElement) {
-          existingSlider.parentElement.parentElement.remove();
-        }
-      }
-      
-      // Use opacity from visParams if provided, otherwise default to 0.7
-      const opacity = visParams.opacity !== undefined ? visParams.opacity : 0.7;
-      
-      // Create Leaflet tile layer using the URL from Earth Engine
-      var eeLayer = L.tileLayer(tileLayer.urlFormat, {
-        attribution: "Google Earth Engine",
-        opacity: opacity,
-        zIndex: 10 // Ensure Earth Engine layers are always on top of base maps
-      });
-      
-      // Store layer reference in both collections
-      layers[name] = eeLayer;
-      overlays[name] = eeLayer;
-      
-      // Add to map if visible is true
-      if (visible) {
-        eeLayer.addTo(map);
-        
-        // Create opacity slider for this layer
-        addOpacitySliderToMap(map, eeLayer, name);
-      }
-      
-      // Add to layer control if it doesn't exist already
-      // This ensures the layer appears in the control panel
-      if (!document.querySelector(`.leaflet-control-layers-selector[type="checkbox"][name="${name}"]`)) {
-        // Get the layer control and add this overlay
-        const layerControl = document.querySelector('.leaflet-control-layers');
-        if (layerControl && layerControl._map) {
-          layerControl._addLayer(eeLayer, name);
-          layerControl._update();
-        }
-      }
-      
-      updateStatus(`${name} layer added to map`);
-    });
-  } catch (e) {
-    updateStatus(`Error processing ${name}: ${e.message}`);
-    console.error('Error in addLayer:', e);
-  }
-}
+// Note: addLayer function moved to layers.js
 
-// Create a legend
-function createLegend(title, colors, labels) {
-  const legendContent = document.getElementById('legend-content');
-  let html = `<h5>${title}</h5>`;
-  
-  for (let i = 0; i < colors.length; i++) {
-    html += `
-      <div class="legend-item">
-        <div class="color-box" style="background-color: ${colors[i]}"></div>
-        <div>${labels[i]}</div>
-      </div>
-    `;
-  }
-  
-  legendContent.innerHTML = html;
-}
+// Note: createLegend function moved to utils.js
 
-// Clear a specific layer from the map
-function clearLayer(layerType) {
-  // Find the layer by name
-  const layerName = layerType === 'RiskZones' ? 'Flood Risk Zones' : layerType;
-  
-  if (layers[layerName]) {
-    map.removeLayer(layers[layerName]);
-    delete layers[layerName];
-    updateStatus(`${layerName} layer removed`);
-  }
-}
-
-// Clear all layers from the map
-function clearLayers() {
-  // Remove all layers
-  Object.keys(layers).forEach(key => {
-    if (layers[key]) {
-      map.removeLayer(layers[key]);
-      
-      // Remove opacity slider for this layer
-      removeOpacitySlider(key);
-    }
-  });
-  
-  // Reset layers object
-  layers = {};
-  overlays = {};
-  
-  // Clear legend
-  document.getElementById('legend-content').innerHTML = '';
-  
-  updateStatus('All layers cleared');
-}
+// Note: clearLayer and clearLayers functions moved to layers.js
 
 // Update status message
-function updateStatus(message) {
-  document.getElementById('status').textContent = message;
-  console.log(message);
-}
-
-// Toggle between single map and comparison view
-function toggleComparisonView() {
-  const mapContainer = document.getElementById('map-container');
-  const comparisonContainer = document.getElementById('comparison-container');
-  const compareButton = document.getElementById('compare-button');
-  const compareFullscreenButton = document.getElementById('compare-fullscreen-button');
-  
-  if (!isComparisonMode) {
-    // Switch to comparison view
-    mapContainer.style.display = 'none';
-    comparisonContainer.style.display = 'flex';
-    compareButton.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
-    compareButton.title = 'Return to single map view';
-    
-    // Show the fullscreen comparison button
-    compareFullscreenButton.classList.remove('d-none');
-    compareFullscreenButton.classList.add('d-inline-block');
-    
-    // Remove all opacity sliders from main map
-    removeAllOpacitySliders('main');
-    
-    // Initialize comparison maps if not already done
-    if (!mapLeft || !mapRight) {
-      initComparisonMaps();
-    } else {
-      // Update the view to match the main map
-      mapLeft.setView(map.getCenter(), map.getZoom());
-      mapRight.setView(map.getCenter(), map.getZoom());
-    }
-    
-    isComparisonMode = true;
-  } else {
-    // Switch back to single map view
-    mapContainer.style.display = 'block';
-    comparisonContainer.style.display = 'none';
-    compareButton.innerHTML = '<i class="bi bi-layout-split"></i>';
-    compareButton.title = 'Toggle comparison view';
-    
-    // Hide the fullscreen comparison button
-    compareFullscreenButton.classList.remove('d-inline-block');
-    compareFullscreenButton.classList.add('d-none');
-    
-    // Exit fullscreen if we're in fullscreen mode
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    }
-    
-    // Update the main map view to match the comparison maps
-    if (mapLeft) {
-      map.setView(mapLeft.getCenter(), mapLeft.getZoom());
-    }
-    
-    // Remove all opacity sliders from comparison maps
-    removeAllOpacitySliders('left');
-    removeAllOpacitySliders('right');
-    
-    // Restore main map layers and their opacity sliders
-    refreshMainMapLayers();
-    
-    isComparisonMode = false;
-  }
-  
-  // Invalidate size to ensure proper rendering after display changes
-  setTimeout(function() {
-    if (map) map.invalidateSize();
-    if (mapLeft) mapLeft.invalidateSize();
-    if (mapRight) mapRight.invalidateSize();
-  }, 100);
-}
-
-// Toggle fullscreen for comparison view
-function toggleComparisonFullscreen() {
-  const comparisonContainer = document.getElementById('comparison-container');
-  const compareFullscreenButton = document.getElementById('compare-fullscreen-button');
-  
-  if (!document.fullscreenElement) {
-    // Enter fullscreen
-    if (comparisonContainer.requestFullscreen) {
-      comparisonContainer.requestFullscreen();
-    } else if (comparisonContainer.mozRequestFullScreen) { // Firefox
-      comparisonContainer.mozRequestFullScreen();
-    } else if (comparisonContainer.webkitRequestFullscreen) { // Chrome, Safari and Opera
-      comparisonContainer.webkitRequestFullscreen();
-    } else if (comparisonContainer.msRequestFullscreen) { // IE/Edge
-      comparisonContainer.msRequestFullscreen();
-    }
-    compareFullscreenButton.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
-    compareFullscreenButton.title = 'Exit fullscreen comparison';
-  } else {
-    // Exit fullscreen
-    if (document.exitFullscreen) {
-      document.exitFullscreen();
-    } else if (document.mozCancelFullScreen) { // Firefox
-      document.mozCancelFullScreen();
-    } else if (document.webkitExitFullscreen) { // Chrome, Safari and Opera
-      document.webkitExitFullscreen();
-    } else if (document.msExitFullscreen) { // IE/Edge
-      document.msExitFullscreen();
-    }
-    compareFullscreenButton.innerHTML = '<i class="bi bi-fullscreen"></i>';
-    compareFullscreenButton.title = 'Fullscreen comparison';
-  }
-  
-  // Invalidate size to ensure proper rendering after fullscreen changes
-  setTimeout(function() {
-    if (mapLeft) mapLeft.invalidateSize();
-    if (mapRight) mapRight.invalidateSize();
-  }, 100);
-}
 
 
-// Initialize the comparison maps
-function initComparisonMaps() {
-  // Create left map
-  mapLeft = L.map('map-left', {
-    fullscreenControl: true,
-    fullscreenControlOptions: {
-      position: 'topleft',
-      title: 'View Fullscreen',
-      titleCancel: 'Exit Fullscreen'
-    }
-  }).setView(map.getCenter(), map.getZoom());
-  
-  // Create right map
-  mapRight = L.map('map-right', {
-    fullscreenControl: true,
-    fullscreenControlOptions: {
-      position: 'topleft',
-      title: 'View Fullscreen',
-      titleCancel: 'Exit Fullscreen'
-    }
-  }).setView(map.getCenter(), map.getZoom());
-  
-  // Add base layers to both maps
-  addBaseLayersToComparisonMaps();
-  
-  // Add coordinates display to both maps
-  addCoordinatesDisplay(mapLeft, 'bottomleft');
-  addCoordinatesDisplay(mapRight, 'bottomleft');
-  
-  // Sync map movements (optional - can be removed if independent maps are preferred)
-  mapLeft.on('move', function() {
-    mapRight.setView(mapLeft.getCenter(), mapLeft.getZoom(), {
-      animate: false
-    });
-  });
-  
-  mapRight.on('move', function() {
-    mapLeft.setView(mapRight.getCenter(), mapRight.getZoom(), {
-      animate: false
-    });
-  });
-}
+// Note: toggleComparisonView function moved to map-controls.js
 
-// Add base layers to comparison maps
-function addBaseLayersToComparisonMaps() {
-  // Create base layers for left map
-  const leftBaseMaps = {};
-  leftBaseMaps["Normal"] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  });
-  leftBaseMaps["Satellite"] = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-  });
-  
-  // Create base layers for right map
-  const rightBaseMaps = {};
-  rightBaseMaps["Normal"] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-  });
-  rightBaseMaps["Satellite"] = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-  });
-  
-  // Add default base layers
-  leftBaseMaps["Normal"].addTo(mapLeft);
-  rightBaseMaps["Satellite"].addTo(mapRight);
-  
-  // Add layer controls with empty overlays initially
-  const leftLayerControl = L.control.layers(leftBaseMaps, {}, {
-    position: 'topright',
-    collapsed: false
-  }).addTo(mapLeft);
-  
-  const rightLayerControl = L.control.layers(rightBaseMaps, {}, {
-    position: 'topright',
-    collapsed: false
-  }).addTo(mapRight);
-  
-  // Add data layers to the controls
-  leftLayerControl.addOverlay(createDummyLayer(), 'Elevation');
-  leftLayerControl.addOverlay(createDummyLayer(), 'Population');
-  
-  rightLayerControl.addOverlay(createDummyLayer(), 'Elevation');
-  rightLayerControl.addOverlay(createDummyLayer(), 'Population');
-  
-  // Add Bekasi boundary to both maps
-  L.rectangle(bekasiBounds.bounds, {
-    color: 'black',
-    weight: 2,
-    fillOpacity: 0,
-  }).addTo(mapLeft).bindPopup('Bekasi Study Area');
-  
-  L.rectangle(bekasiBounds.bounds, {
-    color: 'black',
-    weight: 2,
-    fillOpacity: 0,
-  }).addTo(mapRight).bindPopup('Bekasi Study Area');
-  
-  // Add event listeners for left map overlay changes
-  mapLeft.on('overlayadd', function(e) {
-    const layerName = e.name;
-    console.log(`Layer added to left map: ${layerName}`);
-    
-    if (layerName === 'Elevation') {
-      showDEMOnMap(mapLeft, layersLeft, layerName);
-    } else if (layerName === 'Population') {
-      showPopulationOnMap(mapLeft, layersLeft, layerName);
-    }
-  });
-  
-  mapLeft.on('overlayremove', function(e) {
-    const layerName = e.name;
-    console.log(`Layer removed from left map: ${layerName}`);
-    
-    if (layersLeft[layerName]) {
-      mapLeft.removeLayer(layersLeft[layerName]);
-      delete layersLeft[layerName];
-      removeOpacitySliderForLayer('left', layerName);
-    }
-  });
-  
-  // Add event listeners for right map overlay changes
-  mapRight.on('overlayadd', function(e) {
-    const layerName = e.name;
-    console.log(`Layer added to right map: ${layerName}`);
-    
-    if (layerName === 'Elevation') {
-      showDEMOnMap(mapRight, layersRight, layerName);
-    } else if (layerName === 'Population') {
-      showPopulationOnMap(mapRight, layersRight, layerName);
-    }
-  });
-  
-  mapRight.on('overlayremove', function(e) {
-    const layerName = e.name;
-    console.log(`Layer removed from right map: ${layerName}`);
-    
-    if (layersRight[layerName]) {
-      mapRight.removeLayer(layersRight[layerName]);
-      delete layersRight[layerName];
-      removeOpacitySliderForLayer('right', layerName);
-    }
-  });
-}
+// Note: toggleComparisonFullscreen function moved to map-controls.js
 
-// Create a dummy layer for the layer control
-function createDummyLayer() {
-  return L.layerGroup();
-}
 
-/**
- * Add coordinates display to a specific map
- * @param {L.Map} targetMap - The map to add the slider to
- * @param {string} position - The position on the map ('bottomleft', 'bottomright', etc.)
- */
-function addCoordinatesDisplay(targetMap, position) {
-  // Create a unique class for this map's coordinates display
-  const mapId = targetMap === map ? 'main' : (targetMap === mapLeft ? 'left' : 'right');
-  const coordsClass = `coordinates-control-${mapId}`;
-  
-  const coordsDisplay = L.control({position: position});
-  
-  coordsDisplay.onAdd = function(map) {
-    const div = L.DomUtil.create('div', `leaflet-control leaflet-bar ${coordsClass}`);
-    div.innerHTML = 'Lat: 0.00000, Lng: 0.00000';
-    div.style.backgroundColor = 'white';
-    div.style.padding = '5px 10px';
-    div.style.fontSize = '12px';
-    div.style.borderRadius = '4px';
-    div.style.boxShadow = '0 1px 5px rgba(0,0,0,0.4)';
-    div.style.zIndex = '1000'; // Ensure it's always on top
-    return div;
-  };
-  
-  // Add the control to the map
-  coordsDisplay.addTo(targetMap);
-  
-  // Update coordinates on mouse move
-  targetMap.on('mousemove', function(e) {
-    const lat = e.latlng.lat.toFixed(5);
-    const lng = e.latlng.lng.toFixed(5);
-    // Find the coordinates control using the unique class
-    const coordsElement = targetMap.getContainer().querySelector(`.${coordsClass}`);
-    if (coordsElement) {
-      coordsElement.innerHTML = `Lat: ${lat}, Lng: ${lng}`;
-    }
-  });
-}
+
+
+
+
+
 
 

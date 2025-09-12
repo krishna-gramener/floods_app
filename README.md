@@ -1,21 +1,23 @@
-# Chennai Flood Monitoring System
+# Bekasi Flood Monitoring System
 
-A web-based application for analyzing historical flood data in Chennai, India using Google Earth Engine. This system provides tools for pre-disaster risk assessment, during-disaster monitoring, and post-disaster assessment.
+A web-based application for analyzing flood data in Bekasi, Indonesia using Google Earth Engine. This system provides tools for visualizing elevation, population density, and water occurrence data to support flood risk assessment and monitoring.
 
 ## Features
 
-- **Pre-Disaster Analysis**: Historical risk assessment based on elevation, population density, and water occurrence data
-- **During-Disaster Monitoring**: Real-time flood monitoring using satellite imagery
-- **Post-Disaster Assessment**: Damage assessment and recovery planning tools
-- **Interactive Maps**: Visualize flood risk zones, current flood extent, and impact areas
-- **Detailed Statistics**: View population affected, area impacted, and other critical metrics
+- **Interactive Maps**: Visualize elevation data, population density, and water occurrence
+- **Comparison View**: Compare different layers side by side
+- **Layer Controls**: Toggle layers on/off and adjust opacity
+- **Fullscreen Mode**: View maps in fullscreen for better analysis
+- **Coordinate Display**: View precise coordinates as you move the cursor
+- **Responsive Design**: Works on desktop and mobile devices
 
 ## Technologies Used
 
-- HTML, CSS, JavaScript
-- Bootstrap 5 for UI components
+- HTML, CSS, JavaScript (ES6 Modules)
+- Bootstrap 5 for UI components and responsive design
 - Leaflet.js for interactive maps
 - Google Earth Engine API for satellite imagery and geospatial analysis
+- Leaflet.fullscreen for fullscreen map capabilities
 
 ## Setup Instructions
 
@@ -50,24 +52,68 @@ A web-based application for analyzing historical flood data in Chennai, India us
 4. Open a browser and navigate to `http://localhost:8000`
 5. When prompted, sign in with your Google account that has Earth Engine access
 
-## Usage
+## Code Structure
 
-1. Select an analysis module (Pre-Disaster, During-Disaster, or Post-Disaster)
-2. Choose a historical flood event from the dropdown menu
-3. Click "Run Analysis" to generate maps and statistics
-4. Use the map controls to explore different layers and data visualizations
-5. View detailed information in the right panel
+The application follows a modular architecture with the following files:
+
+### Core Files
+
+- **index.html**: Main HTML file with the application structure and UI elements
+- **script.js**: Main entry point that initializes the application and handles opacity sliders
+- **config.js**: Configuration file with shared constants like map boundaries
+
+### Modules
+
+- **auth.js**: Handles Google Earth Engine authentication
+- **utils.js**: Utility functions for UI updates, loading indicators, and legends
+- **layers.js**: Manages map layers including Earth Engine data visualization
+- **map-controls.js**: Handles map initialization, controls, and comparison views
+
+## Module Functions
+
+### script.js
+- `addOpacitySliderToMap`: Creates opacity slider controls for map layers
+- `removeOpacitySliderForLayer`: Removes opacity slider for a specific layer
+- `removeAllOpacitySliders`: Removes all opacity sliders from a map
+- `initApp`: Initializes the application after authentication
+
+### layers.js
+- `initLayerManager`: Initializes the layer management module
+- `showDEM`: Shows Digital Elevation Model on the main map
+- `showPopulation`: Shows population density on the main map
+- `showDEMOnMap`: Shows DEM on a specific map (main, left, or right)
+- `showPopulationOnMap`: Shows population on a specific map (main, left, or right)
+- `addLayer`: Adds Earth Engine layer to the main map
+- `addLayerToMap`: Adds Earth Engine layer to a specific map
+- `clearLayer`: Removes a specific layer from a map
+- `refreshMainMapLayers`: Refreshes all layers on the main map
+
+### map-controls.js
+- `initMapControls`: Initializes the map controls module
+- `initMap`: Creates and configures the main map
+- `addBaseLayers`: Adds base map layers (Normal, Satellite)
+- `toggleComparisonView`: Switches between single and comparison views
+- `toggleComparisonFullscreen`: Toggles fullscreen mode for comparison view
+- `initComparisonMaps`: Creates and configures the comparison maps
+- `addBaseLayersToComparisonMaps`: Adds base layers to comparison maps
+- `addCoordinatesDisplay`: Adds coordinate display to maps
+- `createDummyLayer`: Creates placeholder layer for layer control
+
+### utils.js
+- `updateStatus`: Updates the status message in the UI
+- `hideLoading`: Hides the loading overlay
+- `createLegend`: Creates or updates the map legend
+
+### auth.js
+- `authenticate`: Handles Google Earth Engine authentication process
 
 ## Data Sources
 
 This application uses the following Google Earth Engine datasets:
 
-- USGS/SRTMGL1_003: Digital Elevation Model
-- CIESIN/GPWv411/GPW_Population_Count: Population density
-- UCSB-CHG/CHIRPS/DAILY: Rainfall data
-- JAXA/GPM_L3/GSMaP/v6/operational: Additional rainfall data
-- COPERNICUS/S1_GRD: Sentinel-1 radar imagery for flood detection
-- JRC/GSW1_4/GlobalSurfaceWater: Water occurrence data
+- USGS/SRTMGL1_003: Digital Elevation Model for Bekasi region
+- CIESIN/GPWv411/GPW_Population_Count: Population density data
+- JRC/GSW1_4/GlobalSurfaceWater: Historical water occurrence data
 
 ## License
 
@@ -75,6 +121,14 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- Based on the original Google Earth Engine script for Chennai flood analysis
-- Inspired by the devastating Chennai floods of 2015 and subsequent events
+- Based on Google Earth Engine's geospatial analysis capabilities
+- Designed for monitoring and analyzing flood risks in the Bekasi region of Indonesia
 - Thanks to the Google Earth Engine team for providing access to satellite imagery and geospatial datasets
+
+## Project Structure Benefits
+
+- **Modular Design**: Each file has a clear, single responsibility
+- **Maintainability**: Easier to update and extend individual components
+- **Reusability**: Functions are organized by purpose and can be reused
+- **Separation of Concerns**: Configuration, UI, data handling, and map controls are separated
+- **Scalability**: New features can be added with minimal changes to existing code
