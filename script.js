@@ -1,6 +1,6 @@
 // Import authentication module and utilities
 import { authenticate } from './auth.js';
-import { createOpacitySlider, updateOpacitySlider, removeOpacitySlider } from './utils.js';
+import { createOpacitySlider, updateOpacitySlider, removeOpacitySlider, hideLoading } from './utils.js';
 import { addLayerToLeftMap, addLayerToRightMap } from './comparison-layers.js';
 
 // Global variables
@@ -33,8 +33,6 @@ const bekasiAreas = {
   'Rawalumbu': [106.986, -6.270],
   'Pondok Gede': [107.083, -6.301]
 };
-
-// Functions for adding layers to comparison maps
 
 /**
  * Show DEM layer on a specific map
@@ -351,42 +349,25 @@ document.addEventListener('DOMContentLoaded', function() {
   // Set up comparison view toggle button
   document.getElementById('compare-button').addEventListener('click', toggleComparisonView);
   
+  // Set up fullscreen comparison button
+  document.getElementById('compare-fullscreen-button').addEventListener('click', toggleComparisonFullscreen);
+  
+  // Listen for fullscreen change events to update button icon
+  document.addEventListener('fullscreenchange', function() {
+    const compareFullscreenButton = document.getElementById('compare-fullscreen-button');
+    if (document.fullscreenElement) {
+      compareFullscreenButton.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
+      compareFullscreenButton.title = 'Exit fullscreen comparison';
+    } else {
+      compareFullscreenButton.innerHTML = '<i class="bi bi-fullscreen"></i>';
+      compareFullscreenButton.title = 'Fullscreen comparison';
+    }
+  });
+  
   // Start authentication process
   updateStatus('Authenticating the user...');
   authenticate(initApp);
 });
-
-// Toggle layer visibility based on checkbox state
-function toggleLayerByCheckbox(checkboxId, layerType) {
-  const checkbox = document.getElementById(checkboxId);
-  const isChecked = checkbox.checked;
-  
-  // Show or hide the layer based on checkbox state
-  if (isChecked) {
-    // Show the layer
-    switch (layerType) {
-      case 'Elevation':
-        showDEM();
-        break;
-      case 'Population':
-        showPopulation();
-        break;
-      // Uncomment to add more layers
-      // case 'Water':
-      //   showWaterOccurrence();
-      //   break;
-      // case 'RiskZones':
-      //   showRiskZones();
-      //   break;
-    }
-  } else {
-    // If the checkbox is unchecked, clear the layer
-    clearLayer(layerType);
-    
-    // Also remove the opacity slider
-    removeOpacitySlider(layerType);
-  }
-}
 
 // Initialize the app after authentication
 function initApp() {
@@ -475,9 +456,6 @@ function initMap() {
     weight: 2,
     fillOpacity: 0,
   }).addTo(map).bindPopup('Bekasi Study Area');
-  
-  // Create overlay layers for main map
-  const mainOverlays = {};
   
   // Add layer control for base maps and overlays
   const layerControl = L.control.layers(baseMaps, {}, {
@@ -597,33 +575,33 @@ function showPopulation() {
     ['Low', 'Medium', 'High', 'Very High']);
 }
 
-// Show Water Occurrence
-function showWaterOccurrence() {
-  updateStatus('Loading water occurrence data...');
+// // Show Water Occurrence
+// function showWaterOccurrence() {
+//   updateStatus('Loading water occurrence data...');
   
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
+//   // Define Bekasi geometry
+//   const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
   
-  // Get water occurrence data
-  const jrcWater = ee.Image("JRC/GSW1_4/GlobalSurfaceWater")
-    .select('occurrence')
-    .clip(bekasiGeometry);
+//   // Get water occurrence data
+//   const jrcWater = ee.Image("JRC/GSW1_4/GlobalSurfaceWater")
+//     .select('occurrence')
+//     .clip(bekasiGeometry);
   
-  // Visualization parameters (same as floods.js)
-  const waterVis = {
-    min: 0,
-    max: 100,
-    palette: ['white', 'lightblue', 'blue', 'darkblue']
-  };
+//   // Visualization parameters (same as floods.js)
+//   const waterVis = {
+//     min: 0,
+//     max: 100,
+//     palette: ['white', 'lightblue', 'blue', 'darkblue']
+//   };
   
-  // Add the layer to the map
-  addLayer(jrcWater, waterVis, 'Water Occurrence');
+//   // Add the layer to the map
+//   addLayer(jrcWater, waterVis, 'Water Occurrence');
   
-  // Update legend
-  createLegend('Water Occurrence', 
-    ['white', 'lightblue', 'blue', 'darkblue'],
-    ['0%', '25%', '50%', '100%']);
-}
+//   // Update legend
+//   createLegend('Water Occurrence', 
+//     ['white', 'lightblue', 'blue', 'darkblue'],
+//     ['0%', '25%', '50%', '100%']);
+// }
 
 // Calculate flood risk for a specific area (adapted from besaki.js)
 function calculateFloodRisk(area, coords) {
@@ -762,150 +740,150 @@ function calculateFloodRisk(area, coords) {
   });
 }
 
-// Show Risk Zones
-function showRiskZones() {
-  updateStatus('Calculating flood risk zones...');
+// // Show Risk Zones
+// function showRiskZones() {
+//   updateStatus('Calculating flood risk zones...');
   
-  // Define Bekasi geometry (using approach from besaki.js)
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
+//   // Define Bekasi geometry (using approach from besaki.js)
+//   const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
   
-  // Get datasets (same as besaki.js)
-  const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
-  const jrcWater = ee.Image("JRC/GSW1_4/GlobalSurfaceWater")
-    .select('occurrence')
-    .clip(bekasiGeometry);
-  const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
-    .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
-    .first()
-    .clip(bekasiGeometry);
-  const historicalRainfall = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-    .filterDate('2010-01-01', '2023-12-31') // Updated date range from besaki.js
-    .filterBounds(bekasiGeometry)
-    .select('precipitation')
-    .sum()
-    .clip(bekasiGeometry);
+//   // Get datasets (same as besaki.js)
+//   const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
+//   const jrcWater = ee.Image("JRC/GSW1_4/GlobalSurfaceWater")
+//     .select('occurrence')
+//     .clip(bekasiGeometry);
+//   const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
+//     .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
+//     .first()
+//     .clip(bekasiGeometry);
+//   const historicalRainfall = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+//     .filterDate('2010-01-01', '2023-12-31') // Updated date range from besaki.js
+//     .filterBounds(bekasiGeometry)
+//     .select('precipitation')
+//     .sum()
+//     .clip(bekasiGeometry);
   
-  // Calculate high rainfall areas (from besaki.js)
-  const highRainfallAreas = historicalRainfall.gt(2000); // Areas with >2000mm total rainfall
+//   // Calculate high rainfall areas (from besaki.js)
+//   const highRainfallAreas = historicalRainfall.gt(2000); // Areas with >2000mm total rainfall
   
-  // Combine factors to create flood proneness (from besaki.js)
-  const floodProneness = jrcWater.divide(100).add(
-    historicalRainfall.unitScale(0, 5000).multiply(0.5)
-  ).add(
-    population.unitScale(0, 10000).multiply(0.3)
-  );
+//   // Combine factors to create flood proneness (from besaki.js)
+//   const floodProneness = jrcWater.divide(100).add(
+//     historicalRainfall.unitScale(0, 5000).multiply(0.5)
+//   ).add(
+//     population.unitScale(0, 10000).multiply(0.3)
+//   );
   
-  // Create risk zones (same approach as besaki.js)
-  const riskZones = ee.Image(1)
-    .where(floodProneness.gt(0.3).and(floodProneness.lte(0.6)), 2)
-    .where(floodProneness.gt(0.6).and(floodProneness.lte(0.8)), 3)
-    .where(floodProneness.gt(0.8), 4);
+//   // Create risk zones (same approach as besaki.js)
+//   const riskZones = ee.Image(1)
+//     .where(floodProneness.gt(0.3).and(floodProneness.lte(0.6)), 2)
+//     .where(floodProneness.gt(0.6).and(floodProneness.lte(0.8)), 3)
+//     .where(floodProneness.gt(0.8), 4);
   
-  // Visualization parameters with opacity (from besaki.js)
-  const riskVis = {
-    min: 1,
-    max: 4,
-    palette: ['green', 'yellow', 'orange', 'red'],
-    opacity: 0.5 // Added opacity from besaki.js
-  };
+//   // Visualization parameters with opacity (from besaki.js)
+//   const riskVis = {
+//     min: 1,
+//     max: 4,
+//     palette: ['green', 'yellow', 'orange', 'red'],
+//     opacity: 0.5 // Added opacity from besaki.js
+//   };
   
-  // Add the layer to the map
-  addLayer(riskZones, riskVis, 'Flood Risk Zones');
+//   // Add the layer to the map
+//   addLayer(riskZones, riskVis, 'Flood Risk Zones');
   
-  // Also add population density layer (hidden by default)
-  addLayer(population, {
-    min: 0, 
-    max: 5000, 
-    palette: ['white', 'yellow', 'orange', 'red'],
-    opacity: 0.5
-  }, 'Population Density', false);
+//   // Also add population density layer (hidden by default)
+//   addLayer(population, {
+//     min: 0, 
+//     max: 5000, 
+//     palette: ['white', 'yellow', 'orange', 'red'],
+//     opacity: 0.5
+//   }, 'Population Density', false);
   
-  // Add historical rainfall layer (hidden by default)
-  addLayer(historicalRainfall, {
-    min: 0, 
-    max: 3000, 
-    palette: ['white', 'lightblue', 'blue', 'darkblue'],
-    opacity: 0.5
-  }, 'Historical Rainfall (2010-2023)', false);
+//   // Add historical rainfall layer (hidden by default)
+//   addLayer(historicalRainfall, {
+//     min: 0, 
+//     max: 3000, 
+//     palette: ['white', 'lightblue', 'blue', 'darkblue'],
+//     opacity: 0.5
+//   }, 'Historical Rainfall (2010-2023)', false);
   
-  // Calculate risk scores for all areas (region-wise analysis)
-  const areaRisks = [];
-  const areaPromises = [];
+//   // Calculate risk scores for all areas (region-wise analysis)
+//   const areaRisks = [];
+//   const areaPromises = [];
   
-  // Process each area
-  Object.keys(bekasiAreas).forEach(function(area) {
-    const coords = bekasiAreas[area];
-    try {
-      // Get risk data for this area (returns a Promise)
-      const riskPromise = calculateFloodRisk(area, coords);
-      areaPromises.push(riskPromise);
+//   // Process each area
+//   Object.keys(bekasiAreas).forEach(function(area) {
+//     const coords = bekasiAreas[area];
+//     try {
+//       // Get risk data for this area (returns a Promise)
+//       const riskPromise = calculateFloodRisk(area, coords);
+//       areaPromises.push(riskPromise);
       
-      // When the promise resolves, add a marker
-      riskPromise.then(result => {
-        if (!result) return;
+//       // When the promise resolves, add a marker
+//       riskPromise.then(result => {
+//         if (!result) return;
         
-        // Store the risk data
-        areaRisks.push(result);
+//         // Store the risk data
+//         areaRisks.push(result);
         
-        // Determine color based on risk score
-        let color = 'green';
-        let size = 5;
+//         // Determine color based on risk score
+//         let color = 'green';
+//         let size = 5;
         
-        if (result.riskScore >= 75) {
-          color = 'red';
-          size = 10;
-        } else if (result.riskScore >= 60) {
-          color = 'orange';
-          size = 8;
-        } else if (result.riskScore >= 45) {
-          color = 'yellow';
-          size = 6;
-        }
+//         if (result.riskScore >= 75) {
+//           color = 'red';
+//           size = 10;
+//         } else if (result.riskScore >= 60) {
+//           color = 'orange';
+//           size = 8;
+//         } else if (result.riskScore >= 45) {
+//           color = 'yellow';
+//           size = 6;
+//         }
         
-        // Convert any Earth Engine objects to JavaScript values for display
-        const riskScore = typeof result.riskScore === 'number' ? result.riskScore : parseFloat(result.riskScore);
-        const elevation = typeof result.elevation === 'number' ? result.elevation : parseFloat(result.elevation);
-        const population = typeof result.population === 'number' ? result.population : parseFloat(result.population);
-        const waterOccurrence = typeof result.waterOccurrence === 'number' ? result.waterOccurrence : parseFloat(result.waterOccurrence);
+//         // Convert any Earth Engine objects to JavaScript values for display
+//         const riskScore = typeof result.riskScore === 'number' ? result.riskScore : parseFloat(result.riskScore);
+//         const elevation = typeof result.elevation === 'number' ? result.elevation : parseFloat(result.elevation);
+//         const population = typeof result.population === 'number' ? result.population : parseFloat(result.population);
+//         const waterOccurrence = typeof result.waterOccurrence === 'number' ? result.waterOccurrence : parseFloat(result.waterOccurrence);
         
-        // Add marker to map with properly formatted values
-        L.circleMarker([result.coordinates[1], result.coordinates[0]], {
-          color: color,
-          fillColor: color,
-          fillOpacity: 0.7,
-          radius: size
-        }).addTo(map).bindPopup(`
-          <strong>${result.area}</strong><br>
-          Risk Score: ${isNaN(riskScore) ? '?' : riskScore.toFixed(1)}/100<br>
-          Elevation: ${isNaN(elevation) ? '?' : elevation.toFixed(1)} m<br>
-          Population: ${isNaN(population) ? '?' : Math.round(population)}/km²<br>
-          Water Occurrence: ${isNaN(waterOccurrence) ? '?' : waterOccurrence.toFixed(1)}%
-        `);
-      }).catch(error => {
-        console.error(`Error processing risk data for ${area}:`, error);
-      });
-    } catch (error) {
-      console.error(`Error calculating risk for ${area}:`, error);
-    }
-  });
+//         // Add marker to map with properly formatted values
+//         L.circleMarker([result.coordinates[1], result.coordinates[0]], {
+//           color: color,
+//           fillColor: color,
+//           fillOpacity: 0.7,
+//           radius: size
+//         }).addTo(map).bindPopup(`
+//           <strong>${result.area}</strong><br>
+//           Risk Score: ${isNaN(riskScore) ? '?' : riskScore.toFixed(1)}/100<br>
+//           Elevation: ${isNaN(elevation) ? '?' : elevation.toFixed(1)} m<br>
+//           Population: ${isNaN(population) ? '?' : Math.round(population)}/km²<br>
+//           Water Occurrence: ${isNaN(waterOccurrence) ? '?' : waterOccurrence.toFixed(1)}%
+//         `);
+//       }).catch(error => {
+//         console.error(`Error processing risk data for ${area}:`, error);
+//       });
+//     } catch (error) {
+//       console.error(`Error calculating risk for ${area}:`, error);
+//     }
+//   });
   
-  // When all promises are resolved, update the status
-  Promise.all(areaPromises)
-    .then(() => {
-      updateStatus(`Risk analysis completed for ${areaRisks.length} areas.`);
-    })
-    .catch(error => {
-      console.error('Error in risk analysis:', error);
-      updateStatus('Risk analysis completed with some errors. Check console for details.');
-    });
+//   // When all promises are resolved, update the status
+//   Promise.all(areaPromises)
+//     .then(() => {
+//       updateStatus(`Risk analysis completed for ${areaRisks.length} areas.`);
+//     })
+//     .catch(error => {
+//       console.error('Error in risk analysis:', error);
+//       updateStatus('Risk analysis completed with some errors. Check console for details.');
+//     });
   
-  // Update legend
-  createLegend('Flood Risk Zones', 
-    ['green', 'yellow', 'orange', 'red'],
-    ['Low Risk', 'Moderate Risk', 'High Risk', 'Severe Risk']);
+//   // Update legend
+//   createLegend('Flood Risk Zones', 
+//     ['green', 'yellow', 'orange', 'red'],
+//     ['Low Risk', 'Moderate Risk', 'High Risk', 'Severe Risk']);
 
-  updateStatus(`Risk analysis completed for ${Object.keys(bekasiAreas).length} areas.`);
-}
+//   updateStatus(`Risk analysis completed for ${Object.keys(bekasiAreas).length} areas.`);
+// }
 
 // Add a layer to the map (using the exact approach from demo.js)
 function addLayer(eeObject, visParams, name, visible = true) {
@@ -1029,6 +1007,7 @@ function toggleComparisonView() {
   const mapContainer = document.getElementById('map-container');
   const comparisonContainer = document.getElementById('comparison-container');
   const compareButton = document.getElementById('compare-button');
+  const compareFullscreenButton = document.getElementById('compare-fullscreen-button');
   
   if (!isComparisonMode) {
     // Switch to comparison view
@@ -1036,6 +1015,10 @@ function toggleComparisonView() {
     comparisonContainer.style.display = 'flex';
     compareButton.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
     compareButton.title = 'Return to single map view';
+    
+    // Show the fullscreen comparison button
+    compareFullscreenButton.classList.remove('d-none');
+    compareFullscreenButton.classList.add('d-inline-block');
     
     // Remove all opacity sliders from main map
     removeAllOpacitySliders('main');
@@ -1056,6 +1039,15 @@ function toggleComparisonView() {
     comparisonContainer.style.display = 'none';
     compareButton.innerHTML = '<i class="bi bi-layout-split"></i>';
     compareButton.title = 'Toggle comparison view';
+    
+    // Hide the fullscreen comparison button
+    compareFullscreenButton.classList.remove('d-inline-block');
+    compareFullscreenButton.classList.add('d-none');
+    
+    // Exit fullscreen if we're in fullscreen mode
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    }
     
     // Update the main map view to match the comparison maps
     if (mapLeft) {
@@ -1080,32 +1072,46 @@ function toggleComparisonView() {
   }, 100);
 }
 
-// Clear layers from comparison maps
-function clearComparisonLayers(mapSide) {
-  if (mapSide === 'left') {
-    // Remove all layers from left map
-    Object.keys(layersLeft).forEach(key => {
-      if (layersLeft[key]) {
-        mapLeft.removeLayer(layersLeft[key]);
-      }
-    });
-    
-    // Reset layers object
-    layersLeft = {};
-    console.log('All layers cleared from left map');
-  } else if (mapSide === 'right') {
-    // Remove all layers from right map
-    Object.keys(layersRight).forEach(key => {
-      if (layersRight[key]) {
-        mapRight.removeLayer(layersRight[key]);
-      }
-    });
-    
-    // Reset layers object
-    layersRight = {};
-    console.log('All layers cleared from right map');
+// Toggle fullscreen for comparison view
+function toggleComparisonFullscreen() {
+  const comparisonContainer = document.getElementById('comparison-container');
+  const compareFullscreenButton = document.getElementById('compare-fullscreen-button');
+  
+  if (!document.fullscreenElement) {
+    // Enter fullscreen
+    if (comparisonContainer.requestFullscreen) {
+      comparisonContainer.requestFullscreen();
+    } else if (comparisonContainer.mozRequestFullScreen) { // Firefox
+      comparisonContainer.mozRequestFullScreen();
+    } else if (comparisonContainer.webkitRequestFullscreen) { // Chrome, Safari and Opera
+      comparisonContainer.webkitRequestFullscreen();
+    } else if (comparisonContainer.msRequestFullscreen) { // IE/Edge
+      comparisonContainer.msRequestFullscreen();
+    }
+    compareFullscreenButton.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
+    compareFullscreenButton.title = 'Exit fullscreen comparison';
+  } else {
+    // Exit fullscreen
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.mozCancelFullScreen) { // Firefox
+      document.mozCancelFullScreen();
+    } else if (document.webkitExitFullscreen) { // Chrome, Safari and Opera
+      document.webkitExitFullscreen();
+    } else if (document.msExitFullscreen) { // IE/Edge
+      document.msExitFullscreen();
+    }
+    compareFullscreenButton.innerHTML = '<i class="bi bi-fullscreen"></i>';
+    compareFullscreenButton.title = 'Fullscreen comparison';
   }
+  
+  // Invalidate size to ensure proper rendering after fullscreen changes
+  setTimeout(function() {
+    if (mapLeft) mapLeft.invalidateSize();
+    if (mapRight) mapRight.invalidateSize();
+  }, 100);
 }
+
 
 // Initialize the comparison maps
 function initComparisonMaps() {
@@ -1296,7 +1302,4 @@ function addCoordinatesDisplay(targetMap, position) {
   });
 }
 
-// Hide loading overlay
-function hideLoading() {
-  document.getElementById('loading').style.display = 'none';
-}
+

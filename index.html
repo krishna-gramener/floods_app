@@ -210,9 +210,14 @@
     <div class="controls">
         <div class="d-flex justify-content-between align-items-center">
             <h2>Bekasi Flood Monitoring</h2>
-            <button id="compare-button" class="btn btn-primary" title="Toggle comparison view">
-                <i class="bi bi-layout-split"></i>
-            </button>
+            <div class="d-flex gap-2">
+                <button id="compare-button" class="btn btn-primary" title="Toggle comparison view">
+                    <i class="bi bi-layout-split"></i>
+                </button>
+                <button id="compare-fullscreen-button" class="btn btn-secondary d-none" title="Fullscreen comparison">
+                    <i class="bi bi-fullscreen"></i>
+                </button>
+            </div>
         </div>
         <div id="status" class="fst-italic text-muted">Initializing...</div>
     </div>

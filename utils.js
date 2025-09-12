@@ -1,5 +1,9 @@
 // Utility functions for the Bekasi Flood Monitoring System
 
+// Hide loading overlay
+export function hideLoading() {
+  document.getElementById('loading').style.display = 'none';
+}
 /**
  * Creates an opacity slider for a layer
  * @param {string} layerName - The name of the layer
