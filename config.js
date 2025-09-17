@@ -1,9 +1,32 @@
 // Configuration for the Bekasi Flood Monitoring System
 
-// Bekasi boundaries
+// Bekasi boundaries - updated to match GeoJSON AOI
 export const bekasiBounds = {
-  bounds: [[-6.45, 106.88], [-6.10, 107.15]],
-  center: [-6.275, 107.015]
+  // Bounds derived from GeoJSON coordinates
+  bounds: [[-6.348589327912876, 106.9242495370928], [-6.213090828568937, 107.06234950376387]],
+  // Center of the GeoJSON polygon
+  center: [-6.280840078240907, 106.99329952042834]
+};
+
+// GeoJSON AOI for Bekasi (March 2025 flood area)
+export const bekasiGeoJSON = {
+  "type": "FeatureCollection",
+  "features": [{
+    "type": "Feature",
+    "properties": {},
+    "geometry": {
+      "coordinates": [
+        [
+          [107.06234950376387, -6.213090828568937],
+          [106.9242495370928, -6.213090828568937],
+          [106.9242495370928, -6.348589327912876],
+          [107.06234950376387, -6.348589327912876],
+          [107.06234950376387, -6.213090828568937]
+        ]
+      ],
+      "type": "Polygon"
+    }
+  }]
 };
 
 // Key Bekasi sub-areas

@@ -1,6 +1,6 @@
 // Layer management functions for the Bekasi Flood Monitoring System
 import { updateStatus, createLegend } from './utils.js';
-import { bekasiBounds } from './config.js';
+import { bekasiBounds, bekasiGeoJSON } from './config.js';
 
 // Import opacity slider function from script.js
 let addOpacitySliderToMap;
@@ -24,9 +24,13 @@ let layersRight = {};
 export function initLayerManager(mainMap, mainLayers, leftMap, leftLayers, rightMap, rightLayers, opacitySliderFn) {
   map = mainMap;
   layers = mainLayers;
-  layersLeft = leftLayers;
-  layersRight = rightLayers;
+  layersLeft = leftLayers || {};
+  layersRight = rightLayers || {};
   addOpacitySliderToMap = opacitySliderFn;
+
+  // Store map references only if they exist
+  if (leftMap) window.mapLeft = leftMap;
+  if (rightMap) window.mapRight = rightMap;
 }
 
 /**
@@ -35,8 +39,10 @@ export function initLayerManager(mainMap, mainLayers, leftMap, leftLayers, right
 export function showDEM() {
   updateStatus('Loading elevation data...');
   
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
+  // Use GeoJSON AOI for more precise area definition
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
   
   // Get DEM data
   const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
@@ -63,8 +69,10 @@ export function showDEM() {
 export function showPopulation() {
   updateStatus('Loading population data...');
   
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
+  // Use GeoJSON AOI for more precise area definition
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
   
   // Get population data
   const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
@@ -95,8 +103,10 @@ export function showPopulation() {
  * @param {string} layerName - The name for the layer
  */
 export function showDEMOnMap(targetMap, layerCollection, layerName) {
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
+  // Use GeoJSON AOI for more precise area definition (same as main map)
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
   
   // Get DEM data
   const dem = ee.Image("USGS/SRTMGL1_003").clip(bekasiGeometry);
@@ -120,8 +130,10 @@ export function showDEMOnMap(targetMap, layerCollection, layerName) {
  * @param {string} layerName - The name for the layer
  */
 export function showPopulationOnMap(targetMap, layerCollection, layerName) {
-  // Define Bekasi geometry
-  const bekasiGeometry = ee.Geometry.Rectangle([106.88, -6.45, 107.15, -6.10]);
+  // Use GeoJSON AOI for more precise area definition (same as main map)
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
   
   // Get population data
   const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")

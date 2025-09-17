@@ -64,7 +64,7 @@ export function initMap() {
   // Create the map centered on Bekasi
   map = L.map('map', {
     center: bekasiBounds.center,
-    zoom: 12,
+    zoom: 13, // Slightly higher zoom for better detail
     fullscreenControl: true,
     fullscreenControlOptions: {
       position: 'topleft'
@@ -74,12 +74,27 @@ export function initMap() {
   // Add base layers
   addBaseLayers();
   
-  // Add Bekasi boundary rectangle
-  L.rectangle(bekasiBounds.bounds, {
-    color: 'black',
+  // Add Bekasi boundary using GeoJSON
+  const aoiCoordinates = [
+    [
+      [107.06234950376387, -6.213090828568937],
+      [106.9242495370928, -6.213090828568937],
+      [106.9242495370928, -6.348589327912876],
+      [107.06234950376387, -6.348589327912876],
+      [107.06234950376387, -6.213090828568937]
+    ]
+  ];
+  
+  // Convert GeoJSON coordinates to Leaflet format (swap lat/lng)
+  const leafletCoords = aoiCoordinates[0].map(coord => [coord[1], coord[0]]);
+  
+  // Add polygon to map
+  L.polygon(leafletCoords, {
+    color: '#000',
     weight: 2,
-    fillOpacity: 0,
-  }).addTo(map).bindPopup('Bekasi Study Area');
+    fillOpacity: 0.05,
+    fillColor: '#3388ff'
+  }).addTo(map).bindPopup('Bekasi Study Area - March 2025 Flood Zone');
   
   // Add layer control for base maps and overlays
   const layerControl = L.control.layers(baseMaps, {}, {
@@ -90,6 +105,11 @@ export function initMap() {
   // Add data layers to the control
   layerControl.addOverlay(createDummyLayer(), 'Elevation');
   layerControl.addOverlay(createDummyLayer(), 'Population');
+  
+  // Initialize overlays object
+  overlays['Pre-Flood Analysis'] = L.layerGroup();
+  overlays['During-Flood Analysis'] = null;
+  overlays['Post-Flood Analysis'] = null;
   
   // Add event listeners for main map overlay checkboxes
   map.on('overlayadd', function(e) {
@@ -283,7 +303,7 @@ export function toggleComparisonFullscreen() {
  */
 export function initComparisonMaps() {
   // Create left map
-  mapLeft = L.map('map-left', {
+  const leftMap = L.map('map-left', {
     fullscreenControl: true,
     fullscreenControlOptions: {
       position: 'topleft'
@@ -291,34 +311,42 @@ export function initComparisonMaps() {
   }).setView(bekasiBounds.center, 12);
   
   // Create right map
-  mapRight = L.map('map-right', {
+  const rightMap = L.map('map-right', {
     fullscreenControl: true,
     fullscreenControlOptions: {
       position: 'topleft'
     }
   }).setView(bekasiBounds.center, 12);
   
+  // Store maps in module scope
+  mapLeft = leftMap;
+  mapRight = rightMap;
+  
   // Add base layers to comparison maps
   addBaseLayersToComparisonMaps();
   
   // Add coordinates display to both maps
-  addCoordinatesDisplay(mapLeft, 'bottomleft');
-  addCoordinatesDisplay(mapRight, 'bottomleft');
+  addCoordinatesDisplay(leftMap, 'bottomleft');
+  addCoordinatesDisplay(rightMap, 'bottomleft');
   
   // Synchronize map movements (optional)
-  mapLeft.on('move', function() {
-    mapRight.setView(mapLeft.getCenter(), mapLeft.getZoom(), {
+  leftMap.on('move', function() {
+    rightMap.setView(leftMap.getCenter(), leftMap.getZoom(), {
       animate: false
     });
   });
   
-  mapRight.on('move', function() {
-    mapLeft.setView(mapRight.getCenter(), mapRight.getZoom(), {
+  rightMap.on('move', function() {
+    leftMap.setView(rightMap.getCenter(), rightMap.getZoom(), {
       animate: false
     });
   });
   
+  return { mapLeft: leftMap, mapRight: rightMap };
+
+  // Return initialized maps
   return { mapLeft, mapRight };
+
 }
 
 /**
