@@ -413,6 +413,30 @@ document.addEventListener('DOMContentLoaded', function() {
           if (toggle) toggle.checked = false;
         });
       });
+      
+      // Force map to refresh by invalidating size
+      setTimeout(() => {
+        if (map) {
+          map.invalidateSize();
+          
+          // Re-add any active layers that might have been affected
+          Object.keys(overlays).forEach(layerName => {
+            const layer = overlays[layerName];
+            const toggleId = layerName === 'Pre-Flood Analysis' ? 'toggle-pre-flood' :
+                          layerName === 'During-Flood Analysis' ? 'toggle-during-flood' :
+                          layerName === 'Post-Flood Analysis' ? 'toggle-post-flood' : null;
+            
+            if (toggleId) {
+              const toggle = document.getElementById(toggleId);
+              if (toggle && toggle.checked && layer) {
+                if (!map.hasLayer(layer)) {
+                  layer.addTo(map);
+                }
+              }
+            }
+          });
+        }
+      }, 100);
     }
   });
   

@@ -1,6 +1,6 @@
 // Map control functions for the Bekasi Flood Monitoring System
 import { updateStatus } from './utils.js';
-import { showDEM, showPopulation, showDEMOnMap, showPopulationOnMap, clearLayer, refreshMainMapLayers } from './layers.js';
+import { showDEM, showPopulation, showGSW, showAOI, showDEMOnMap, showPopulationOnMap, showGSWOnMap, showAOIOnMap, clearLayer, refreshMainMapLayers } from './layers.js';
 import { bekasiBounds } from './config.js';
 
 // Import opacity slider functions from script.js
@@ -103,8 +103,10 @@ export function initMap() {
   }).addTo(map);
   
   // Add data layers to the control
+  layerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
   layerControl.addOverlay(createDummyLayer(), 'Elevation');
   layerControl.addOverlay(createDummyLayer(), 'Population');
+  layerControl.addOverlay(createDummyLayer(), 'Surface Water');
   
   // Initialize overlays object
   overlays['Pre-Flood Analysis'] = L.layerGroup();
@@ -116,10 +118,14 @@ export function initMap() {
     const layerName = e.name;
     console.log(`Layer added to main map: ${layerName}`);
     
-    if (layerName === 'Elevation') {
+    if (layerName === 'Bekasi AOI') {
+      showAOI();
+    } else if (layerName === 'Elevation') {
       showDEM();
     } else if (layerName === 'Population') {
       showPopulation();
+    } else if (layerName === 'Surface Water') {
+      showGSW();
     }
   });
   
@@ -127,12 +133,18 @@ export function initMap() {
     const layerName = e.name;
     console.log(`Layer removed from main map: ${layerName}`);
     
-    if (layerName === 'Elevation') {
+    if (layerName === 'Bekasi AOI') {
+      clearLayer('Bekasi AOI');
+      removeOpacitySliderForLayer('main', 'Bekasi AOI');
+    } else if (layerName === 'Elevation') {
       clearLayer('Elevation');
       removeOpacitySliderForLayer('main', 'Elevation');
     } else if (layerName === 'Population') {
       clearLayer('Population');
       removeOpacitySliderForLayer('main', 'Population');
+    } else if (layerName === 'Surface Water') {
+      clearLayer('Surface Water');
+      removeOpacitySliderForLayer('main', 'Surface Water');
     }
   });
   
@@ -387,11 +399,15 @@ export function addBaseLayersToComparisonMaps() {
   }).addTo(mapRight);
   
   // Add data layers to the controls
+  leftLayerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
   leftLayerControl.addOverlay(createDummyLayer(), 'Elevation');
   leftLayerControl.addOverlay(createDummyLayer(), 'Population');
+  leftLayerControl.addOverlay(createDummyLayer(), 'Surface Water');
   
+  rightLayerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
   rightLayerControl.addOverlay(createDummyLayer(), 'Elevation');
   rightLayerControl.addOverlay(createDummyLayer(), 'Population');
+  rightLayerControl.addOverlay(createDummyLayer(), 'Surface Water');
   
   // Add Bekasi boundary to both maps
   L.rectangle(bekasiBounds.bounds, {
@@ -411,10 +427,14 @@ export function addBaseLayersToComparisonMaps() {
     const layerName = e.name;
     console.log(`Layer added to left map: ${layerName}`);
     
-    if (layerName === 'Elevation') {
+    if (layerName === 'Bekasi AOI') {
+      showAOIOnMap(mapLeft, layersLeft, layerName);
+    } else if (layerName === 'Elevation') {
       showDEMOnMap(mapLeft, layersLeft, layerName);
     } else if (layerName === 'Population') {
       showPopulationOnMap(mapLeft, layersLeft, layerName);
+    } else if (layerName === 'Surface Water') {
+      showGSWOnMap(mapLeft, layersLeft, layerName);
     }
   });
   
@@ -434,10 +454,14 @@ export function addBaseLayersToComparisonMaps() {
     const layerName = e.name;
     console.log(`Layer added to right map: ${layerName}`);
     
-    if (layerName === 'Elevation') {
+    if (layerName === 'Bekasi AOI') {
+      showAOIOnMap(mapRight, layersRight, layerName);
+    } else if (layerName === 'Elevation') {
       showDEMOnMap(mapRight, layersRight, layerName);
     } else if (layerName === 'Population') {
       showPopulationOnMap(mapRight, layersRight, layerName);
+    } else if (layerName === 'Surface Water') {
+      showGSWOnMap(mapRight, layersRight, layerName);
     }
   });
   

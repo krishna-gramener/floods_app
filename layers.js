@@ -2,6 +2,8 @@
 import { updateStatus, createLegend } from './utils.js';
 import { bekasiBounds, bekasiGeoJSON } from './config.js';
 
+// Global Earth Engine datasets are accessed directly in each function for consistency
+
 // Import opacity slider function from script.js
 let addOpacitySliderToMap;
 
@@ -151,6 +153,131 @@ export function showPopulationOnMap(targetMap, layerCollection, layerName) {
   
   // Add the layer to the map
   addLayerToMap(targetMap, layerCollection, population, popVis, layerName);
+}
+
+/**
+ * Show Bekasi AOI boundary on a specific map
+ * @param {L.Map} targetMap - The map to add the layer to
+ * @param {Object} layerCollection - The collection to store the layer in
+ * @param {string} layerName - The name for the layer
+ */
+export function showAOIOnMap(targetMap, layerCollection, layerName) {
+  // Use GeoJSON AOI for precise area definition
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
+  
+  // Create a filled image for the AOI area with translucent black fill
+  const aoiFill = ee.Image(1).clip(bekasiGeometry);
+  
+  // Create a boundary image for the AOI and combine with fill
+  const aoiBoundary = ee.Image().byte().paint({
+    featureCollection: ee.FeatureCollection([ee.Feature(bekasiGeometry)]),
+    color: 1,
+    width: 2
+  });
+  
+  // Visualization parameters for fill
+  const fillVis = {
+    palette: ['#000000'], // Black fill
+    opacity: 0.2 // Translucent
+  };
+  
+  // Add only the fill layer with the AOI name
+  addLayerToMap(targetMap, layerCollection, aoiFill, fillVis, layerName);
+}
+
+/**
+ * Show Global Surface Water (GSW) layer on a specific map
+ * @param {L.Map} targetMap - The map to add the layer to
+ * @param {Object} layerCollection - The collection to store the layer in
+ * @param {string} layerName - The name for the layer
+ */
+export function showGSWOnMap(targetMap, layerCollection, layerName) {
+  // Use GeoJSON AOI for more precise area definition
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
+  
+  // Get GSW occurrence data from JRC dataset
+  const gsw = ee.Image("JRC/GSW1_4/GlobalSurfaceWater");
+  const gswOccurrence = gsw.select('occurrence').clip(bekasiGeometry);
+  
+  // Visualization parameters
+  const gswVis = {
+    min: 0,
+    max: 100,
+    palette: ['white', '#4292c6', '#08306b'],
+    opacity: 0.7
+  };
+  
+  // Add the layer to the map
+  addLayerToMap(targetMap, layerCollection, gswOccurrence, gswVis, layerName);
+}
+
+/**
+ * Show Bekasi AOI boundary on the main map
+ */
+export function showAOI() {
+  updateStatus('Loading AOI boundary...');
+  
+  // Use GeoJSON AOI for precise area definition
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
+  
+  // Create a filled image for the AOI area with translucent black fill
+  const aoiFill = ee.Image(1).clip(bekasiGeometry);
+  
+  // Create a boundary image for the AOI and combine with fill
+  const aoiBoundary = ee.Image().byte().paint({
+    featureCollection: ee.FeatureCollection([ee.Feature(bekasiGeometry)]),
+    color: 1,
+    width: 2
+  });
+  
+  // Visualization parameters for fill
+  const fillVis = {
+    palette: ['#000000'], // Black fill
+    opacity: 0.2 // Translucent
+  };
+  
+  // Add only the fill layer with the AOI name
+  addLayer(aoiFill, fillVis, 'Bekasi AOI');
+  
+  updateStatus('AOI boundary loaded');
+}
+
+/**
+ * Show Global Surface Water (GSW) on main map
+ */
+export function showGSW() {
+  updateStatus('Loading surface water data...');
+  
+  // Use GeoJSON AOI for more precise area definition
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
+  
+  // Get GSW occurrence data from JRC dataset
+  const gsw = ee.Image("JRC/GSW1_4/GlobalSurfaceWater");
+  const gswOccurrence = gsw.select('occurrence').clip(bekasiGeometry);
+  
+  // Visualization parameters
+  const gswVis = {
+    min: 0,
+    max: 100,
+    palette: ['white', '#4292c6', '#08306b'],
+    opacity: 0.7
+  };
+  
+  // Add the layer to the map using the common addLayer function
+  addLayer(gswOccurrence, gswVis, 'Surface Water');
+  
+  // Update legend
+  createLegend('Surface Water Occurrence', 
+    ['white', '#4292c6', '#08306b'],
+    ['Rare', 'Occasional', 'Permanent']);
 }
 
 /**

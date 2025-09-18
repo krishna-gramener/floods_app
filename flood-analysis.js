@@ -271,19 +271,26 @@ function generateRiskZones() {
     });
   });
   
-  // Categorize risk zones
-  const lowRisk = scored.filter(ee.Filter.lt('risk_score', 30));
+  // Categorize risk zones and add risk_level property
+  const lowRisk = scored.filter(ee.Filter.lt('risk_score', 30))
+    .map(feature => feature.set({risk_level: 'low'}));
+    
   const medRisk = scored.filter(ee.Filter.and(
     ee.Filter.gte('risk_score', 30),
     ee.Filter.lt('risk_score', 70)
-  ));
-  const highRisk = scored.filter(ee.Filter.gte('risk_score', 70));
+  )).map(feature => feature.set({risk_level: 'medium'}));
+  
+  const highRisk = scored.filter(ee.Filter.gte('risk_score', 70))
+    .map(feature => feature.set({risk_level: 'high'}));
+  
+  // Merge all features with their risk levels
+  const allWithRiskLevel = lowRisk.merge(medRisk).merge(highRisk);
   
   return {
     low: lowRisk,
     medium: medRisk,
     high: highRisk,
-    all: scored
+    all: allWithRiskLevel
   };
 }
 
