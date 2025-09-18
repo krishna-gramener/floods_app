@@ -6,6 +6,91 @@ import { initMapControls, initMap, initComparisonMaps, toggleComparisonView, tog
 import { bekasiBounds, bekasiAreas } from './config.js';
 import { initFloodAnalysis, runFloodAnalysis, analysisState } from './flood-analysis.js';
 
+/**
+ * Creates flood analysis layers for comparison maps
+ * This function should be called when analysis is completed,
+ * regardless of whether we're in comparison mode or not
+ */
+export function createComparisonFloodLayers() {
+  // If comparison maps don't exist yet, just store the data for later
+  // They will be created when switching to comparison mode
+  if (!mapLeft || !mapRight) {
+    console.log('Comparison maps not initialized yet, data will be used when they are created');
+    return;
+  }
+  
+  console.log('Creating flood analysis layers for comparison maps');
+  
+  // Setup for both left and right maps
+  ['left', 'right'].forEach(side => {
+    const targetMap = side === 'left' ? mapLeft : mapRight;
+    const targetOverlays = side === 'left' ? layersLeft : layersRight;
+    
+    // Create layers for each analysis period
+    ['pre', 'during', 'post'].forEach(period => {
+      const layerName = `${period === 'pre' ? 'Pre' : period === 'during' ? 'During' : 'Post'}-Flood Analysis`;
+      
+      // Skip if analysis not completed
+      if (!analysisState[period]) {
+        return;
+      }
+      
+      try {
+        // Create appropriate layer based on period
+        if (period === 'pre') {
+          // Create risk zone layer group
+          if (window.riskData && window.riskData.features) {
+            const riskZoneGroup = L.layerGroup();
+            
+            window.riskData.features.forEach(feature => {
+              const coords = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+              let color;
+              switch (feature.properties.risk_level) {
+                case 'low': color = '#00ff00'; break;
+                case 'medium': color = '#ffff00'; break;
+                case 'high': color = '#ff0000'; break;
+                default: color = '#00ff00';
+              }
+              
+              const markerIcon = L.divIcon({
+                className: 'custom-marker',
+                html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+              });
+              
+              const marker = L.marker(coords, {
+                icon: markerIcon,
+                title: feature.properties.name
+              }).bindPopup(`<div class="area-popup"><h5>${feature.properties.name}</h5><p><strong>Risk Level:</strong> ${feature.properties.risk_level}</p><p><strong>Risk Score:</strong> ${feature.properties.risk_score.toFixed(1)}</p></div>`);
+              
+              riskZoneGroup.addLayer(marker);
+            });
+            
+            // Store layer in overlays
+            targetOverlays[layerName] = riskZoneGroup;
+          }
+        } else {
+          // Create flood tile layer
+          const originalLayer = overlays[layerName];
+          if (originalLayer && originalLayer._url) {
+            const floodTileLayer = L.tileLayer(originalLayer._url, {
+              attribution: originalLayer.options.attribution || 'Google Earth Engine',
+              opacity: originalLayer.options.opacity || 0.7,
+              zIndex: 1000
+            });
+            
+            // Store layer in overlays
+            targetOverlays[layerName] = floodTileLayer;
+          }
+        }
+      } catch (error) {
+        console.error(`Error creating ${layerName} for ${side} map:`, error);
+      }
+    });
+  });
+}
+
 // Global variables
 let map;
 let mapLeft;
@@ -271,7 +356,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Initialize new maps
-        // Initialize comparison maps
         const maps = initComparisonMaps();
         mapLeft = maps.mapLeft;
         mapRight = maps.mapRight;
@@ -282,81 +366,21 @@ document.addEventListener('DOMContentLoaded', function() {
         layersLeft = {};
         layersRight = {};
         
-        // Setup for both left and right maps
-        ['left', 'right'].forEach(side => {
-          const targetMap = side === 'left' ? mapLeft : mapRight;
-          const targetOverlays = side === 'left' ? layersLeft : layersRight;
-          
-          // Create layers for each analysis period
-          ['pre', 'during', 'post'].forEach(period => {
-            const layerName = `${period === 'pre' ? 'Pre' : period === 'during' ? 'During' : 'Post'}-Flood Analysis`;
-            
-            // Skip if analysis not completed
-            if (!analysisState[period]) {
-              return;
-            }
-            
-            try {
-              // Create appropriate layer based on period
-              if (period === 'pre') {
-                // Create risk zone layer group
-                if (window.riskData && window.riskData.features) {
-                  const riskZoneGroup = L.layerGroup();
-                  
-                  window.riskData.features.forEach(feature => {
-                    const coords = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
-                    let color;
-                    switch (feature.properties.risk_level) {
-                      case 'low': color = '#00ff00'; break;
-                      case 'medium': color = '#ffff00'; break;
-                      case 'high': color = '#ff0000'; break;
-                      default: color = '#00ff00';
-                    }
-                    
-                    const markerIcon = L.divIcon({
-                      className: 'custom-marker',
-                      html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
-                      iconSize: [16, 16],
-                      iconAnchor: [8, 8]
-                    });
-                    
-                    const marker = L.marker(coords, {
-                      icon: markerIcon,
-                      title: feature.properties.name
-                    }).bindPopup(`<div class="area-popup"><h5>${feature.properties.name}</h5><p><strong>Risk Level:</strong> ${feature.properties.risk_level}</p><p><strong>Risk Score:</strong> ${feature.properties.risk_score.toFixed(1)}</p></div>`);
-                    
-                    riskZoneGroup.addLayer(marker);
-                  });
-                  
-                  // Store layer in overlays
-                  targetOverlays[layerName] = riskZoneGroup;
-                }
-              } else {
-                // Create flood tile layer
-                const originalLayer = overlays[layerName];
-                if (originalLayer && originalLayer._url) {
-                  const floodTileLayer = L.tileLayer(originalLayer._url, {
-                    attribution: originalLayer.options.attribution || 'Google Earth Engine',
-                    opacity: originalLayer.options.opacity || 0.7,
-                    zIndex: 1000
-                  });
-                  
-                  // Store layer in overlays
-                  targetOverlays[layerName] = floodTileLayer;
-                }
-              }
-            } catch (error) {
-              console.error(`Error creating ${layerName} for ${side} map:`, error);
-            }
-          });
-        });
+        // Create flood analysis layers for comparison maps
+        createComparisonFloodLayers();
         
-        // Set up toggle handlers using a simpler class-based approach
+        // Set up toggle handlers for comparison maps
         
         // Add a class to all comparison map toggles for easier selection
         document.querySelectorAll('[id^="toggle-"][id$="-left"], [id^="toggle-"][id$="-right"]').forEach(toggle => {
           toggle.classList.add('comparison-toggle');
-          toggle.disabled = false; // Enable toggles that have layers
+          
+          // Make sure flood analysis toggles are not checked by default
+          if (toggle.id.includes('-flood-')) {
+            toggle.checked = false;
+          } else {
+            toggle.disabled = false; // Enable non-flood toggles that have layers
+          }
         });
         
         // Add a single event listener for all comparison toggles
@@ -364,20 +388,28 @@ document.addEventListener('DOMContentLoaded', function() {
           // Check if this is a comparison toggle
           if (event.target.classList.contains('comparison-toggle')) {
             const toggleId = event.target.id;
-            
-            // Parse the toggle ID to get period and side
-            const matches = toggleId.match(/toggle-(\w+)-flood-(\w+)/);
-            if (!matches) return;
-            
-            const period = matches[1]; // pre, during, or post
-            const side = matches[2];   // left or right
+            const side = toggleId.endsWith('-left') ? 'left' : 'right';
             
             // Get the map and overlays
             const targetMap = side === 'left' ? mapLeft : mapRight;
             const targetOverlays = side === 'left' ? layersLeft : layersRight;
             
-            // Get the layer name
-            const layerName = `${period === 'pre' ? 'Pre' : period === 'during' ? 'During' : 'Post'}-Flood Analysis`;
+            let layerName;
+            
+            // Handle different toggle types
+            if (toggleId.includes('-flood-')) {
+              // Parse the toggle ID to get period for flood analysis toggles
+              const matches = toggleId.match(/toggle-(\w+)-flood/);
+              if (!matches) return;
+              
+              const period = matches[1]; // pre, during, or post
+              layerName = `${period === 'pre' ? 'Pre' : period === 'during' ? 'During' : 'Post'}-Flood Analysis`;
+            } else {
+              // For non-flood toggles, extract the layer name from the toggle ID
+              const parts = toggleId.split('-');
+              layerName = parts[1]; // The layer name part
+            }
+            
             const layer = targetOverlays[layerName];
             
             if (!targetMap || !layer) return;
@@ -490,7 +522,19 @@ function initApp() {
     removeOpacitySliderForLayer, removeAllOpacitySliders);
   
   // Initialize the flood analysis module
-  initFloodAnalysis(map, addOpacitySliderToMap, overlays);
+  initFloodAnalysis(map, addOpacitySliderToMap, overlays, isComparisonMode);
+  
+  // Export function to update comparison mode in flood-analysis module
+  window.updateFloodAnalysisComparisonMode = function(mode) {
+    isComparisonMode = mode;
+    // Re-initialize flood analysis with updated comparison mode
+    initFloodAnalysis(map, addOpacitySliderToMap, overlays, isComparisonMode);
+    
+    // If switching to comparison mode, create flood analysis layers for comparison maps
+    if (mode && mapLeft && mapRight) {
+      createComparisonFloodLayers();
+    }
+  };
   
   // Hide loading overlay
   hideLoading();

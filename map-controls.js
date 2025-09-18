@@ -1,6 +1,7 @@
 // Map control functions for the Bekasi Flood Monitoring System
 import { updateStatus } from './utils.js';
 import { showDEM, showPopulation, showGSW, showAOI, showDEMOnMap, showPopulationOnMap, showGSWOnMap, showAOIOnMap, clearLayer, refreshMainMapLayers } from './layers.js';
+import { showLegend, hideLegend } from './utils.js';
 import { bekasiBounds } from './config.js';
 
 // Import opacity slider functions from script.js
@@ -122,10 +123,13 @@ export function initMap() {
       showAOI();
     } else if (layerName === 'Elevation') {
       showDEM();
+      showLegend('Elevation');
     } else if (layerName === 'Population') {
       showPopulation();
+      showLegend('Population');
     } else if (layerName === 'Surface Water') {
       showGSW();
+      showLegend('Surface Water');
     }
   });
   
@@ -139,12 +143,15 @@ export function initMap() {
     } else if (layerName === 'Elevation') {
       clearLayer('Elevation');
       removeOpacitySliderForLayer('main', 'Elevation');
+      hideLegend('Elevation');
     } else if (layerName === 'Population') {
       clearLayer('Population');
       removeOpacitySliderForLayer('main', 'Population');
+      hideLegend('Population');
     } else if (layerName === 'Surface Water') {
       clearLayer('Surface Water');
       removeOpacitySliderForLayer('main', 'Surface Water');
+      hideLegend('Surface Water');
     }
   });
   
@@ -229,6 +236,11 @@ export function toggleComparisonView() {
     }
     
     isComparisonMode = true;
+    
+    // Update isComparisonMode in flood-analysis module
+    if (window.updateFloodAnalysisComparisonMode) {
+      window.updateFloodAnalysisComparisonMode(true);
+    }
   } else {
     // Switch back to single map view
     mapContainer.style.display = 'block';
@@ -258,6 +270,11 @@ export function toggleComparisonView() {
     refreshMainMapLayers();
     
     isComparisonMode = false;
+    
+    // Update isComparisonMode in flood-analysis module
+    if (window.updateFloodAnalysisComparisonMode) {
+      window.updateFloodAnalysisComparisonMode(false);
+    }
   }
   
   // Invalidate size to ensure proper rendering after display changes
@@ -446,6 +463,8 @@ export function addBaseLayersToComparisonMaps() {
       mapLeft.removeLayer(layersLeft[layerName]);
       delete layersLeft[layerName];
       removeOpacitySliderForLayer('left', layerName);
+      
+      // No need to check for legend visibility on comparison maps
     }
   });
   
@@ -473,6 +492,8 @@ export function addBaseLayersToComparisonMaps() {
       mapRight.removeLayer(layersRight[layerName]);
       delete layersRight[layerName];
       removeOpacitySliderForLayer('right', layerName);
+      
+      // No need to check for legend visibility on comparison maps
     }
   });
 }

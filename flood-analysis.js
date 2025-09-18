@@ -1,11 +1,13 @@
 // Flood analysis module for Bekasi Flood Monitoring System
 import { updateStatus } from './utils.js';
 import { bekasiAreas, bekasiGeoJSON } from './config.js';
+import { createComparisonFloodLayers } from './script.js';
 
 // External variables
 let map;
 let addOpacitySliderToMap;
 let overlays = {};
+let isComparisonMode = false;
 
 // Analysis state tracking
 export const analysisState = {
@@ -18,23 +20,26 @@ export const analysisState = {
 export function updateAnalysisState(period, completed) {
   analysisState[period] = completed;
   
-  // Update all related toggles (main, left, right)
+  // Update all related toggles
   ['', '-left', '-right'].forEach(suffix => {
     const toggle = document.getElementById(`toggle-${period}-flood${suffix}`);
     if (toggle) {
+      // Enable the toggle when analysis is completed
       toggle.disabled = !completed;
-      // Only check the toggle if this is a newly completed analysis
-      if (completed && !toggle.checked) {
+      
+      // Only check the main map toggle, not the comparison map toggles
+      if (completed && !toggle.checked && suffix === '') {
         toggle.checked = true;
       }
     }
   });
 }
 
-export function initFloodAnalysis(mainMap, opacitySliderFn, overlaysObj) {
+export function initFloodAnalysis(mainMap, opacitySliderFn, overlaysObj, comparisonMode) {
   map = mainMap;
   addOpacitySliderToMap = opacitySliderFn;
   overlays = overlaysObj;
+  isComparisonMode = comparisonMode;
 
   // Set up layer toggle handlers
   const toggles = {
@@ -334,6 +339,10 @@ export function runFloodAnalysis(period) {
                 // Update analysis state and sync all toggles
                 updateAnalysisState('pre', true);
                 
+                // Always create flood analysis layers for comparison maps
+                // This ensures layers are ready even if we're not in comparison mode yet
+                createComparisonFloodLayers();
+                
                 updateStatus('Pre-flood risk analysis complete');
               } else {
                 // Handle the error case
@@ -397,6 +406,10 @@ export function runFloodAnalysis(period) {
           // Update analysis state and sync all toggles
           updateAnalysisState(period, true);
           floodTileLayer.addTo(map);
+          
+          // Always create flood analysis layers for comparison maps
+          // This ensures layers are ready even if we're not in comparison mode yet
+          createComparisonFloodLayers();
           
           // Add opacity slider
           if (addOpacitySliderToMap) {
@@ -541,6 +554,10 @@ export function runFloodAnalysis(period) {
           
           // Add layer to map
           overlays[layerName].addTo(map);
+          
+          // Always create flood analysis layers for comparison maps
+          // This ensures layers are ready even if we're not in comparison mode yet
+          createComparisonFloodLayers();
           
           // Add opacity slider
           if (addOpacitySliderToMap) {

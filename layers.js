@@ -1,5 +1,5 @@
 // Layer management functions for the Bekasi Flood Monitoring System
-import { updateStatus, createLegend } from './utils.js';
+import { updateStatus, createLegend, showLegend, hideLegend } from './utils.js';
 import { bekasiBounds, bekasiGeoJSON } from './config.js';
 
 // Global Earth Engine datasets are accessed directly in each function for consistency
@@ -62,7 +62,8 @@ export function showDEM() {
   // Update legend
   createLegend('Elevation (m)', 
     ['#253494', '#2c7fb8', '#41b6c4', '#a1dab4', '#ffffcc'],
-    ['0', '10', '20', '30', '50']);
+    ['0', '10', '20', '30', '50'],
+    'Elevation');
 }
 
 /**
@@ -93,9 +94,10 @@ export function showPopulation() {
   addLayer(population, popVis, 'Population');
   
   // Update legend
-  createLegend('Population Density', 
+  createLegend('Population', 
     ['white', 'yellow', 'orange', 'red'],
-    ['Low', 'Medium', 'High', 'Very High']);
+    ['0', 'Low', 'Medium', 'High'],
+    'Population');
 }
 
 /**
@@ -277,7 +279,8 @@ export function showGSW() {
   // Update legend
   createLegend('Surface Water Occurrence', 
     ['white', '#4292c6', '#08306b'],
-    ['Rare', 'Occasional', 'Permanent']);
+    ['Rare', 'Occasional', 'Permanent'],
+    'Surface Water');
 }
 
 /**
