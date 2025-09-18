@@ -136,8 +136,8 @@ function addOpacitySliderToMap(targetMap, layer, layerName) {
     opacityControlsContainer.id = `opacity-controls-${mapId}`;
     opacityControlsContainer.className = 'opacity-controls-container';
     opacityControlsContainer.style.position = 'absolute';
-    opacityControlsContainer.style.top = '10px';
-    opacityControlsContainer.style.right = '50px'; // Position to the left of the layer control
+    opacityControlsContainer.style.top = '110px';
+    opacityControlsContainer.style.left = '5px'; // Position to the left of the layer control
     opacityControlsContainer.style.zIndex = '1000';
     
     // Make sure we have the container
@@ -183,8 +183,8 @@ function addOpacitySliderToMap(targetMap, layer, layerName) {
       sliderPanel.id = sliderId;
       sliderPanel.className = 'opacity-panel';
       sliderPanel.style.position = 'absolute';
-      sliderPanel.style.top = '40px';
-      sliderPanel.style.right = '50px';
+      sliderPanel.style.top = '110px';
+      sliderPanel.style.left = '5px';
       sliderPanel.style.backgroundColor = 'white';
       sliderPanel.style.padding = '10px';
       sliderPanel.style.borderRadius = '4px';
@@ -538,4 +538,44 @@ function initApp() {
   
   // Hide loading overlay
   hideLoading();
+  
+  // Initialize sidebar toggle functionality
+  const sidebarToggle = document.getElementById('sidebar-toggle');
+  const sidebar = document.getElementById('analysis-sidebar');
+  const toggleIcon = document.getElementById('sidebar-toggle-icon');
+  
+  if (sidebarToggle && sidebar && toggleIcon) {
+    // Function to update icon based on sidebar state
+    function updateToggleIcon(isOpen) {
+      // First add animation class to fade out current icon
+      toggleIcon.classList.add('icon-animate-out');
+      
+      // After animation completes, change the icon and animate in
+      setTimeout(() => {
+        // Change icon class based on sidebar state
+        toggleIcon.classList.remove('bi-chevron-left', 'bi-chevron-right');
+        toggleIcon.classList.add(isOpen ? 'bi-chevron-right' : 'bi-chevron-left');
+        
+        // Update button title
+        sidebarToggle.title = isOpen ? 'Hide Analysis Panel' : 'Show Analysis Panel';
+        
+        // Remove old animation class and add new one
+        toggleIcon.classList.remove('icon-animate-out');
+        toggleIcon.classList.add('icon-animate-in');
+        
+        // Move the toggle button with the sidebar
+        sidebarToggle.style.transform = isOpen ? 'translateX(-350px)' : '';
+      }, 150); // Half of the animation duration
+    }
+    
+    // Set up click handler
+    sidebarToggle.addEventListener('click', function() {
+      const willBeOpen = !sidebar.classList.contains('show');
+      sidebar.classList.toggle('show');
+      updateToggleIcon(willBeOpen);
+    });
+    
+    // Initialize icon state
+    updateToggleIcon(sidebar.classList.contains('show'));
+  }
 }

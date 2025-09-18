@@ -756,9 +756,11 @@ function createPreFloodPanel(riskData) {
   let resultsPanel = document.getElementById('flood-results');
   if (!resultsPanel) {
     resultsPanel = document.createElement('div');
+    resultsPanel.style.position = 'relative';
     resultsPanel.id = 'flood-results';
     resultsPanel.className = 'mt-3 p-3 bg-light border rounded';
-    document.querySelector('.controls').appendChild(resultsPanel);
+    resultsPanel.style.height = '100%';
+    document.querySelector('#analysis-sidebar').appendChild(resultsPanel);
   }
   
   // Sort risk data by risk score
@@ -824,7 +826,7 @@ function createErrorPanel(errorMessage) {
     resultsPanel = document.createElement('div');
     resultsPanel.id = 'flood-results';
     resultsPanel.className = 'mt-3 p-3 bg-light border rounded';
-    document.querySelector('.controls').appendChild(resultsPanel);
+    document.querySelector('#analysis-sidebar').appendChild(resultsPanel);
   }
   
   // Create HTML content with error message
@@ -851,7 +853,7 @@ function createPostFloodPanel(results) {
     resultsPanel = document.createElement('div');
     resultsPanel.id = 'flood-results';
     resultsPanel.className = 'mt-3 p-3 bg-light border rounded';
-    document.querySelector('.controls').appendChild(resultsPanel);
+    document.querySelector('#analysis-sidebar').appendChild(resultsPanel);
   }
   
   // Format results
@@ -905,8 +907,12 @@ function createResultsPanel(results) {
   if (!resultsPanel) {
     resultsPanel = document.createElement('div');
     resultsPanel.id = 'flood-results';
-    resultsPanel.className = 'mt-3 p-3 bg-light border rounded';
-    document.querySelector('.controls').appendChild(resultsPanel);
+    resultsPanel.className = 'mt-3 p-3 bg-white border rounded';
+    // Append to sidebar instead of controls
+    document.getElementById('analysis-sidebar').appendChild(resultsPanel);
+    
+    // Make sure sidebar is visible when results are shown
+    document.getElementById('analysis-sidebar').classList.add('show');
   }
   
   // Format results
