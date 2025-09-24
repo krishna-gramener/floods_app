@@ -1,5 +1,5 @@
 // Layer management functions for the Bekasi Flood Monitoring System
-import { updateStatus, createLegend, showLegend, hideLegend } from './utils.js';
+import { createLegend, showLegend, hideLegend } from './utils.js';
 import { bekasiBounds, bekasiGeoJSON } from './config.js';
 
 // Global Earth Engine datasets are accessed directly in each function for consistency
@@ -39,7 +39,7 @@ export function initLayerManager(mainMap, mainLayers, leftMap, leftLayers, right
  * Show DEM layer on the main map
  */
 export function showDEM() {
-  updateStatus('Loading elevation data...');
+  console.log('Loading elevation data...');
   
   // Use GeoJSON AOI for more precise area definition
   const bekasiGeometry = ee.FeatureCollection([
@@ -70,7 +70,7 @@ export function showDEM() {
  * Show Population layer on the main map
  */
 export function showPopulation() {
-  updateStatus('Loading population data...');
+  console.log('Loading population data...');
   
   // Use GeoJSON AOI for more precise area definition
   const bekasiGeometry = ee.FeatureCollection([
@@ -221,7 +221,7 @@ export function showGSWOnMap(targetMap, layerCollection, layerName) {
  * Show Bekasi AOI boundary on the main map
  */
 export function showAOI() {
-  updateStatus('Loading AOI boundary...');
+  console.log('Loading AOI boundary...');
   
   // Use GeoJSON AOI for precise area definition
   const bekasiGeometry = ee.FeatureCollection([
@@ -247,14 +247,14 @@ export function showAOI() {
   // Add only the fill layer with the AOI name
   addLayer(aoiFill, fillVis, 'Bekasi AOI');
   
-  updateStatus('AOI boundary loaded');
+  console.log('AOI boundary loaded');
 }
 
 /**
  * Show Global Surface Water (GSW) on main map
  */
 export function showGSW() {
-  updateStatus('Loading surface water data...');
+  console.log('Loading surface water data...');
   
   // Use GeoJSON AOI for more precise area definition
   const bekasiGeometry = ee.FeatureCollection([
@@ -291,7 +291,7 @@ export function showGSW() {
  * @param {boolean} visible - Whether the layer should be visible initially
  */
 export function addLayer(eeObject, visParams, name, visible = true) {
-  updateStatus(`Processing ${name} data...`);
+  console.log(`Processing ${name} data...`);
   try {
     eeObject.getMap(visParams, function(tileLayer) {
       console.log('Layer created:', name, tileLayer);
@@ -324,10 +324,9 @@ export function addLayer(eeObject, visParams, name, visible = true) {
         }
       }
       
-      updateStatus(`${name} layer added to map`);
+      console.log(`${name} layer added to map`);
     });
   } catch (e) {
-    updateStatus(`Error processing ${name}: ${e.message}`);
     console.error('Error in addLayer:', e);
   }
 }
@@ -389,7 +388,7 @@ export function clearLayer(layerType) {
   if (layers[layerName]) {
     map.removeLayer(layers[layerName]);
     delete layers[layerName];
-    updateStatus(`${layerName} layer removed`);
+    console.log(`${layerName} layer removed`);
   }
 }
 

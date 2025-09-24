@@ -6,10 +6,10 @@ export function hideLoading() {
 }
 
 // Update status message
-export function updateStatus(message) {
-  document.getElementById('status').textContent = message;
-  console.log(message);
-}
+// export function updateStatus(message) {
+//   document.getElementById('status').textContent = message;
+//   console.log(message);
+// }
 
 /**
  * Creates or updates the legend for the current layer

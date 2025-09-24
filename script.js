@@ -1,6 +1,6 @@
 // Import authentication module and utilities
 import { authenticate } from './auth.js';
-import { hideLoading, updateStatus } from './utils.js';
+import { hideLoading } from './utils.js';
 import { initLayerManager} from './layers.js';
 import { initMapControls, initMap, initComparisonMaps, toggleComparisonView, toggleComparisonFullscreen} from './map-controls.js';
 import { bekasiBounds, bekasiAreas } from './config.js';
@@ -485,7 +485,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (period !== 'none') {
       runFloodAnalysis(period);
     } else {
-      updateStatus('Please select a flood period first');
+      console.log('Please select a flood period first');
     }
   });
   
@@ -502,13 +502,13 @@ document.addEventListener('DOMContentLoaded', function() {
   });
   
   // Start authentication process
-  updateStatus('Authenticating the user...');
+  console.log('Authenticating the user...');
   authenticate(initApp);
 });
 
 // Initialize the app after authentication
 function initApp() {
-  updateStatus('User initialized successfully');
+  // updateStatus('User initialized successfully');
   console.log('User initialized successfully');
   
   // Initialize the main map

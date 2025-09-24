@@ -24,12 +24,12 @@
         }
 
         #map {
-            height: 80vh;
+            height: 85vh;
             width: 100%;
         }
         
         #map-container {
-            height: 80vh;
+            height: 85vh;
             width: 100%;
         }
 
@@ -328,15 +328,15 @@
 
     <!-- Control bar removed as it's now empty -->
     
-    <!-- Main map container (default view) -->
-    <div id="map-container">
-        <div id="map"></div>
-    </div>
-    
-    <!-- Comparison maps container (initially hidden) -->
-    <div id="comparison-container" style="display: none;">
-        <div class="comparison-side">
-            <div id="map-left" class="comparison-map"></div>
+        <!-- Main map container (default view) -->
+        <div id="map-container">
+            <div id="map"></div>
+        </div>
+        
+        <!-- Comparison maps container (initially hidden) -->
+        <div id="comparison-container" style="display: none;">
+            <div class="comparison-side">
+                <div id="map-left" class="comparison-map"></div>
             <!-- Left map toggles -->
             <div class="map-toggles bg-light p-2 mt-2 rounded border">
                 <div class="d-flex align-items-center gap-3">
@@ -422,30 +422,32 @@
         <!-- Flood analysis results will be dynamically added here -->
         <!-- The flood-results div will be created by JavaScript -->
     </div>
-
-    <div class="controls">
-        <!-- Layer toggles moved here from control bar -->
-        <div id="layer-toggles-container" class="mb-3">
-            <div id="layer-toggles" class="d-none">
-                <div class="d-inline-flex align-items-center gap-2 py-1 px-2 bg-light rounded border" style="margin-left: 0; width: auto; font-size: 0.9rem;">
-                    <small class="text-muted">Layers:</small>
-                    <div class="layer-toggle">
-                        <input type="checkbox" id="toggle-pre-flood">
-                        <label for="toggle-pre-flood">Pre</label>
-                    </div>
-                    <div class="layer-toggle">
-                        <input type="checkbox" id="toggle-during-flood">
-                        <label for="toggle-during-flood">During</label>
-                    </div>
-                    <div class="layer-toggle">
-                        <input type="checkbox" id="toggle-post-flood">
-                        <label for="toggle-post-flood">Post</label>
+        
+        <!-- Controls section with layer toggles -->
+        <div class="controls">
+            <!-- Layer toggles moved here from control bar -->
+            <div id="layer-toggles-container" class="mb-3">
+                <div id="layer-toggles" class="d-none">
+                    <div class="d-inline-flex align-items-center gap-2 py-1 px-2 bg-light rounded border" style="margin-left: 0; width: auto; font-size: 0.9rem;">
+                        <small class="text-muted">Layers:</small>
+                        <div class="layer-toggle">
+                            <input type="checkbox" id="toggle-pre-flood">
+                            <label for="toggle-pre-flood">Pre</label>
+                        </div>
+                        <div class="layer-toggle">
+                            <input type="checkbox" id="toggle-during-flood">
+                            <label for="toggle-during-flood">During</label>
+                        </div>
+                        <div class="layer-toggle">
+                            <input type="checkbox" id="toggle-post-flood">
+                            <label for="toggle-post-flood">Post</label>
+                        </div>
                     </div>
                 </div>
             </div>
+            
+            <!-- <div id="status" class="fst-italic text-muted">Initializing...</div> -->
         </div>
-        
-        <div id="status" class="fst-italic text-muted">Initializing...</div>
     </div>
 
     <!-- Google Earth Engine API -->

@@ -1,5 +1,5 @@
 // Map control functions for the Bekasi Flood Monitoring System
-import { updateStatus } from './utils.js';
+// import { updateStatus } from './utils.js';
 import { showDEM, showPopulation, showGSW, showAOI, showDEMOnMap, showPopulationOnMap, showGSWOnMap, showAOIOnMap, clearLayer, refreshMainMapLayers } from './layers.js';
 import { showLegend, hideLegend } from './utils.js';
 import { bekasiBounds } from './config.js';
@@ -51,7 +51,7 @@ export function initMapControls(mainMap, mainLayers, mainOverlays, leftMap, left
  * Initialize the main map
  */
 export function initMap() {
-  updateStatus('Initializing map...');
+  console.log('Initializing map...');
   
   if (!bekasiBounds) {
     console.error('bekasiBounds is not defined');
@@ -179,7 +179,7 @@ export function initMap() {
   };
   legend.addTo(map);
   
-  updateStatus('Map initialized. Click a button to load data.');
+  console.log('Map initialized. Click a button to load data.');
   
   return map;
 }

@@ -1,5 +1,5 @@
 // Flood analysis module for Bekasi Flood Monitoring System
-import { updateStatus } from './utils.js';
+// import { updateStatus } from './utils.js';
 import { bekasiAreas, bekasiGeoJSON } from './config.js';
 import { createComparisonFloodLayers } from './script.js';
 
@@ -302,7 +302,7 @@ function generateRiskZones() {
 export function runFloodAnalysis(period) {
   // Show loader
   document.getElementById('analysis-loader').classList.remove('d-none');
-  updateStatus(`Running ${periods[period].label} analysis...`);
+  console.log(`Running ${periods[period].label} analysis...`);
   
   // Show layer toggles if not already visible
   const layerToggles = document.getElementById('layer-toggles');
@@ -343,16 +343,16 @@ export function runFloodAnalysis(period) {
                 // This ensures layers are ready even if we're not in comparison mode yet
                 createComparisonFloodLayers();
                 
-                updateStatus('Pre-flood risk analysis complete');
+                console.log('Pre-flood risk analysis complete');
               } else {
                 // Handle the error case
-                updateStatus('Error: Could not retrieve risk data');
+                console.log('Error: Could not retrieve risk data');
                 console.error('Risk data is undefined or missing features', riskData);
                 createErrorPanel('Could not retrieve risk zone data. Please try again.');
               }
             } catch (innerError) {
               console.error('Error processing risk data:', innerError);
-              updateStatus('Error processing risk data');
+              console.log('Error processing risk data');
               createErrorPanel('Error processing risk zone data: ' + innerError.message);
             }
             
@@ -361,14 +361,14 @@ export function runFloodAnalysis(period) {
             // Error callback for evaluate
             document.getElementById('analysis-loader').classList.add('d-none');
             console.error('Earth Engine error:', error);
-            updateStatus('Earth Engine error: ' + error.message);
+            console.log('Earth Engine error: ' + error.message);
             createErrorPanel('Earth Engine error: ' + error.message);
             resolve();
           });
         } catch (outerError) {
           document.getElementById('analysis-loader').classList.add('d-none');
           console.error('Error in pre-flood analysis:', outerError);
-          updateStatus('Error in pre-flood analysis');
+          console.log('Error in pre-flood analysis');
           createErrorPanel('Error in pre-flood analysis: ' + outerError.message);
           resolve();
         }
@@ -504,10 +504,10 @@ export function runFloodAnalysis(period) {
                     }))
                   });
                   
-                  updateStatus('Flood analysis complete');
+                  console.log('Flood analysis complete');
                 } catch (error) {
                   console.error('Error in during-flood analysis:', error);
-                  updateStatus('Error in flood analysis');
+                  console.log('Error in flood analysis');
                   createErrorPanel('Could not process flood data. Please try again.');
                 }
                 
@@ -643,10 +643,10 @@ export function runFloodAnalysis(period) {
                     }))
                   });
                   
-                  updateStatus('Post-flood analysis complete');
+                  console.log('Post-flood analysis complete');
                 } catch (error) {
                   console.error('Error in post-flood analysis:', error);
-                  updateStatus('Error in post-flood analysis');
+                  console.log('Error in post-flood analysis');
                   createErrorPanel('Could not process post-flood data. Please try again.');
                 }
                 
@@ -658,12 +658,12 @@ export function runFloodAnalysis(period) {
       } else {
         // Invalid period
         document.getElementById('analysis-loader').classList.add('d-none');
-        updateStatus(`Invalid analysis period: ${period}`);
+        console.log(`Invalid analysis period: ${period}`);
         reject(new Error(`Invalid analysis period: ${period}`));
       }
     } catch (error) {
       document.getElementById('analysis-loader').classList.add('d-none');
-      updateStatus(`Error in flood analysis: ${error.message}`);
+      console.log(`Error in flood analysis: ${error.message}`);
       reject(error);
     }
   });
