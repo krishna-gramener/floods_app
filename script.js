@@ -11,6 +11,45 @@ import { initFloodAnalysis, runFloodAnalysis, analysisState } from './flood-anal
  * This function should be called when analysis is completed,
  * regardless of whether we're in comparison mode or not
  */
+
+// --- Risk pin helpers ---
+const RISK_STYLES = {
+  low:    { color: '#2ECC71', label: 'Low'    },
+  medium: { color: '#F1C40F', label: 'Medium' },
+  high:   { color: '#E74C3C', label: 'High'   }
+};
+
+// REPLACE your makeRiskIcon with this IMG-based L.icon (stable on zoom)
+function makeRiskIcon(level = 'low') {
+  const { color } = RISK_STYLES[level] || RISK_STYLES.low;
+
+  // 28x40 pin; using data-URI avoids DOM reflow issues from divIcon
+  const svg = `
+  <svg width="28" height="40" viewBox="0 0 28 40" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="display:block">
+    <defs>
+      <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+        <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.25"/>
+      </filter>
+    </defs>
+    <g filter="url(#shadow)">
+      <path d="M14 0C6.82 0 1 5.82 1 13c0 9.53 11.1 21.5 12.05 22.54a1.3 1.3 0 0 0 1.9 0C15.9 34.5 27 22.53 27 13 27 5.82 21.18 0 14 0z"
+            fill="${color}" stroke="white" stroke-width="2"/>
+      <circle cx="14" cy="13" r="4.5" fill="white"/>
+    </g>
+  </svg>`.trim();
+
+  const dataUri = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+
+  return L.icon({
+    iconUrl: dataUri,
+    iconSize: [28, 40],
+    iconAnchor: [14, 38],   // pin tip
+    popupAnchor: [0, -34],
+    className: 'risk-pin-img'
+  });
+}
+
+
 export function createComparisonFloodLayers() {
   // If comparison maps don't exist yet, just store the data for later
   // They will be created when switching to comparison mode
@@ -44,26 +83,20 @@ export function createComparisonFloodLayers() {
             
             window.riskData.features.forEach(feature => {
               const coords = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
-              let color;
-              switch (feature.properties.risk_level) {
-                case 'low': color = '#00ff00'; break;
-                case 'medium': color = '#ffff00'; break;
-                case 'high': color = '#ff0000'; break;
-                default: color = '#00ff00';
-              }
-              
-              const markerIcon = L.divIcon({
-                className: 'custom-marker',
-                html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
-              });
-              
+              const level = String(feature.properties.risk_level || 'low').toLowerCase();
+
               const marker = L.marker(coords, {
-                icon: markerIcon,
+                icon: makeRiskIcon(level),
                 title: feature.properties.name
-              }).bindPopup(`<div class="area-popup"><h5>${feature.properties.name}</h5><p><strong>Risk Level:</strong> ${feature.properties.risk_level}</p><p><strong>Risk Score:</strong> ${feature.properties.risk_score.toFixed(1)}</p></div>`);
-              
+              }).bindPopup(`
+                <div class="area-popup">
+                  <h5 class="mb-1">${feature.properties.name}</h5>
+                  <p class="mb-1"><strong>Risk Level:</strong> 
+                    <span class="risk-badge risk-${level}">${(RISK_STYLES[level]?.label) || 'Low'}</span>
+                  </p>
+                  <p class="mb-0"><strong>Risk Score:</strong> ${Number(feature.properties.risk_score).toFixed(1)}</p>
+                </div>
+              `);
               riskZoneGroup.addLayer(marker);
             });
             
@@ -135,10 +168,6 @@ function addOpacitySliderToMap(targetMap, layer, layerName) {
     opacityControlsContainer = document.createElement('div');
     opacityControlsContainer.id = `opacity-controls-${mapId}`;
     opacityControlsContainer.className = 'opacity-controls-container';
-    opacityControlsContainer.style.position = 'absolute';
-    opacityControlsContainer.style.top = '110px';
-    opacityControlsContainer.style.left = '5px'; // Position to the left of the layer control
-    opacityControlsContainer.style.zIndex = '1000';
     
     // Make sure we have the container
     if (targetMap._container) {
@@ -153,14 +182,6 @@ function addOpacitySliderToMap(targetMap, layer, layerName) {
   const buttonDiv = document.createElement('div');
   buttonDiv.id = sliderId;
   buttonDiv.className = 'opacity-button-control';
-  buttonDiv.style.backgroundColor = 'white';
-  buttonDiv.style.padding = '5px';
-  buttonDiv.style.borderRadius = '4px';
-  buttonDiv.style.boxShadow = '0 1px 5px rgba(0,0,0,0.4)';
-  buttonDiv.style.marginBottom = '5px';
-  buttonDiv.style.cursor = 'pointer';
-  buttonDiv.style.display = 'flex';
-  buttonDiv.style.alignItems = 'center';
   buttonDiv.setAttribute('data-map-id', mapId);
   buttonDiv.setAttribute('data-layer-name', layerName);
   buttonDiv.innerHTML = `<i class="bi bi-sliders"></i> ${layerName}`;
@@ -182,15 +203,6 @@ function addOpacitySliderToMap(targetMap, layer, layerName) {
       sliderPanel = document.createElement('div');
       sliderPanel.id = sliderId;
       sliderPanel.className = 'opacity-panel';
-      sliderPanel.style.position = 'absolute';
-      sliderPanel.style.top = '110px';
-      sliderPanel.style.left = '5px';
-      sliderPanel.style.backgroundColor = 'white';
-      sliderPanel.style.padding = '10px';
-      sliderPanel.style.borderRadius = '4px';
-      sliderPanel.style.boxShadow = '0 2px 5px rgba(0,0,0,0.4)';
-      sliderPanel.style.zIndex = '1001'; // Higher than the button
-      sliderPanel.style.width = '200px';
       sliderPanel.setAttribute('data-map-id', mapId);
       sliderPanel.setAttribute('data-layer-name', layerName);
       
@@ -535,47 +547,133 @@ function initApp() {
       createComparisonFloodLayers();
     }
   };
-  
+
   // Hide loading overlay
   hideLoading();
   
-  // Initialize sidebar toggle functionality
-  const sidebarToggle = document.getElementById('sidebar-toggle');
-  const sidebar = document.getElementById('analysis-sidebar');
-  const toggleIcon = document.getElementById('sidebar-toggle-icon');
-  
-  if (sidebarToggle && sidebar && toggleIcon) {
-    // Function to update icon based on sidebar state
-    function updateToggleIcon(isOpen) {
-      // First add animation class to fade out current icon
-      toggleIcon.classList.add('icon-animate-out');
-      
-      // After animation completes, change the icon and animate in
-      setTimeout(() => {
-        // Change icon class based on sidebar state
-        toggleIcon.classList.remove('bi-chevron-left', 'bi-chevron-right');
-        toggleIcon.classList.add(isOpen ? 'bi-chevron-right' : 'bi-chevron-left');
-        
-        // Update button title
-        sidebarToggle.title = isOpen ? 'Hide Analysis Panel' : 'Show Analysis Panel';
-        
-        // Remove old animation class and add new one
-        toggleIcon.classList.remove('icon-animate-out');
-        toggleIcon.classList.add('icon-animate-in');
-        
-        // Move the toggle button with the sidebar
-        sidebarToggle.style.transform = isOpen ? 'translateX(-350px)' : '';
-      }, 150); // Half of the animation duration
-    }
-    
-    // Set up click handler
-    sidebarToggle.addEventListener('click', function() {
-      const willBeOpen = !sidebar.classList.contains('show');
-      sidebar.classList.toggle('show');
-      updateToggleIcon(willBeOpen);
-    });
-    
-    // Initialize icon state
-    updateToggleIcon(sidebar.classList.contains('show'));
+// Initialize sidebar toggle functionality
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const sidebar = document.getElementById('analysis-sidebar');
+const toggleIcon = document.getElementById('sidebar-toggle-icon');
+
+// MUST match your CSS width
+const SIDEBAR_W = 350;
+
+if (sidebarToggle && sidebar && toggleIcon) {
+  function positionToggleButton() {
+    const isOpen = !sidebar.classList.contains('closed');
+    // keep the button just outside the sidebar when open; dock to edge when closed
+    sidebarToggle.style.right = isOpen ? (SIDEBAR_W + 10) + 'px' : '10px';
   }
+
+  // Update icon + title
+  function updateToggleIcon(isOpen) {
+    // tiny fade-out/in
+    toggleIcon.classList.add('icon-animate-out');
+
+    setTimeout(() => {
+      toggleIcon.classList.remove('bi-chevron-left', 'bi-chevron-right', 'icon-animate-out');
+      toggleIcon.classList.add(isOpen ? 'bi-chevron-right' : 'bi-chevron-left', 'icon-animate-in');
+      sidebarToggle.title = isOpen ? 'Hide Analysis Panel' : 'Show Analysis Panel';
+    }, 150);
+  }
+
+  function applyState(isOpen) {
+    // CSS uses .closed to slide out; remove it to open
+    sidebar.classList.toggle('closed', !isOpen);
+    positionToggleButton();
+
+    // after slide completes, refresh map sizes if they exist
+    setTimeout(() => {
+      try { 
+        if (map) map.invalidateSize(); 
+      } catch {}
+      try { 
+        if (mapLeft) mapLeft.invalidateSize(); 
+        if (mapRight) mapRight.invalidateSize(); 
+      } catch {}
+    }, 300);
+
+    updateToggleIcon(isOpen);
+  }
+
+  // Click handler - toggle between open and closed
+  sidebarToggle.addEventListener('click', () => {
+    const willOpen = sidebar.classList.contains('closed');
+    applyState(willOpen);
+  });
+
+  // Initialize: sidebar OPEN by default (remove 'closed' class)
+  sidebar.classList.remove('closed');
+  applyState(true);
+}
+}
+
+function showLayerToggles() {
+  const desktopToggles = document.getElementById('layer-toggles');
+  const mobileToggles = document.getElementById('layer-toggles-mobile');
+  
+  if (desktopToggles) {
+    desktopToggles.classList.remove('d-none');
+    desktopToggles.classList.add('d-lg-flex');
+  }
+  
+  if (mobileToggles) {
+    mobileToggles.classList.remove('d-none');
+  }
+}
+
+/**
+ * Sync mobile and desktop toggles
+ * Call this function when setting up event listeners
+ */
+function syncLayerToggles() {
+  // Desktop to Mobile sync
+  ['pre', 'during', 'post'].forEach(period => {
+    const desktopToggle = document.getElementById(`toggle-${period}-flood`);
+    const mobileToggle = document.getElementById(`toggle-${period}-flood-mobile`);
+    
+    if (desktopToggle && mobileToggle) {
+      desktopToggle.addEventListener('change', function() {
+        mobileToggle.checked = this.checked;
+      });
+      
+      mobileToggle.addEventListener('change', function() {
+        desktopToggle.checked = this.checked;
+        // Trigger the desktop toggle's change event to update the map
+        desktopToggle.dispatchEvent(new Event('change'));
+      });
+    }
+  });
+}
+
+// Call this when analysis is complete
+// Add to your updateAnalysisState function or after analysis completes
+function onAnalysisComplete() {
+  showLayerToggles();
+  syncLayerToggles();
+}
+
+// Example: Update your existing code
+// In flood-analysis.js, modify updateAnalysisState function:
+export function updateAnalysisState(period, completed) {
+  analysisState[period] = completed;
+  
+  // Show layer toggles when first analysis completes
+  const anyCompleted = Object.values(analysisState).some(state => state);
+  if (anyCompleted) {
+    showLayerToggles();
+    syncLayerToggles();
+  }
+  
+  // Update all related toggles
+  ['', '-left', '-right', '-mobile'].forEach(suffix => {
+    const toggle = document.getElementById(`toggle-${period}-flood${suffix}`);
+    if (toggle) {
+      toggle.disabled = !completed;
+      if (completed && !toggle.checked && suffix === '') {
+        toggle.checked = true;
+      }
+    }
+  });
 }

@@ -1,5 +1,4 @@
 // Flood analysis module for Bekasi Flood Monitoring System
-// import { updateStatus } from './utils.js';
 import { bekasiAreas, bekasiGeoJSON } from './config.js';
 import { createComparisonFloodLayers } from './script.js';
 
@@ -8,6 +7,19 @@ let map;
 let addOpacitySliderToMap;
 let overlays = {};
 let isComparisonMode = false;
+let persistentHighAlertLayer = null; // Store high alert markers permanently
+
+const TOGGLE_BY_PERIOD = {
+  pre: 'toggle-pre-flood',
+  during: 'toggle-during-flood',
+  post: 'toggle-post-flood',
+};
+
+const LAYER_BY_PERIOD = {
+  pre: 'Pre-Flood Analysis',
+  during: 'During-Flood Analysis',
+  post: 'Post-Flood Analysis',
+};
 
 // Analysis state tracking
 export const analysisState = {
@@ -16,18 +28,95 @@ export const analysisState = {
   post: false
 };
 
+export function showOnlyActivePeriod(activePeriod) {
+  ['pre', 'during', 'post'].forEach((p) => {
+    const toggleId = TOGGLE_BY_PERIOD[p];
+    const layerName = LAYER_BY_PERIOD[p];
+
+    // Handle main map toggle
+    const mainToggle = document.getElementById(toggleId);
+    if (mainToggle) {
+      if (p === activePeriod) {
+        mainToggle.style.display = '';
+        mainToggle.disabled = false;
+        if (!mainToggle.checked) mainToggle.checked = true;
+      } else {
+        mainToggle.checked = false;
+        mainToggle.disabled = true;
+        mainToggle.style.display = 'none';
+      }
+    }
+
+    // Handle comparison toggles (only if in comparison mode)
+    if (isComparisonMode) {
+      ['left', 'right'].forEach((suffix) => {
+        const compToggle = document.getElementById(`${toggleId}-${suffix}`);
+        if (compToggle) {
+          compToggle.disabled = !analysisState[p];
+          compToggle.style.display = analysisState[p] ? '' : 'none';
+        }
+      });
+    }
+
+    // Handle main map layers
+    const layer = overlays[layerName];
+    if (!layer) return;
+
+    if (p === activePeriod) {
+      // Ensure the active layer is on the main map
+      if (!map.hasLayer(layer)) {
+        layer.addTo(map);
+      }
+    } else {
+      // Remove inactive layers from main map
+      if (map.hasLayer(layer)) {
+        map.removeLayer(layer);
+      }
+    }
+    
+    // **NEW: Handle hotspot markers for each period**
+    const hotspotLayerName = `${layerName.replace(' Analysis', '')} Hotspots`;
+    const hotspotLayer = overlays[hotspotLayerName];
+    
+    if (hotspotLayer) {
+      if (p === activePeriod) {
+        // Show hotspots for active period
+        if (!map.hasLayer(hotspotLayer)) {
+          hotspotLayer.addTo(map);
+        }
+      } else {
+        // Hide hotspots for inactive periods
+        if (map.hasLayer(hotspotLayer)) {
+          map.removeLayer(hotspotLayer);
+        }
+      }
+    }
+  });
+
+  // Ensure the master toggles container is visible
+  const layerToggles = document.getElementById('layer-toggles');
+  if (layerToggles) layerToggles.classList.remove('d-none');
+}
+
 // Function to update analysis state and sync toggles
 export function updateAnalysisState(period, completed) {
   analysisState[period] = completed;
+  
+  // Show layer toggles when any analysis completes
+  if (completed) {
+    const layerToggles = document.getElementById('layer-toggles');
+    if (layerToggles) {
+      layerToggles.classList.remove('d-none');
+    }
+  }
   
   // Update all related toggles
   ['', '-left', '-right'].forEach(suffix => {
     const toggle = document.getElementById(`toggle-${period}-flood${suffix}`);
     if (toggle) {
-      // Enable the toggle when analysis is completed
       toggle.disabled = !completed;
       
-      // Only check the main map toggle, not the comparison map toggles
+      // Only check the main map toggle automatically
       if (completed && !toggle.checked && suffix === '') {
         toggle.checked = true;
       }
@@ -41,7 +130,7 @@ export function initFloodAnalysis(mainMap, opacitySliderFn, overlaysObj, compari
   overlays = overlaysObj;
   isComparisonMode = comparisonMode;
 
-  // Set up layer toggle handlers
+  // Set up layer toggle handlers for main map
   const toggles = {
     'toggle-pre-flood': { layerName: 'Pre-Flood Analysis', period: 'pre' },
     'toggle-during-flood': { layerName: 'During-Flood Analysis', period: 'during' },
@@ -51,26 +140,12 @@ export function initFloodAnalysis(mainMap, opacitySliderFn, overlaysObj, compari
   Object.entries(toggles).forEach(([toggleId, config]) => {
     const toggle = document.getElementById(toggleId);
     if (toggle) {
-      // Set initial state based on analysis completion
       toggle.checked = analysisState[config.period];
       toggle.disabled = !analysisState[config.period];
 
       toggle.addEventListener('change', function() {
-        const layer = overlays[config.layerName];
-        if (layer && analysisState[config.period]) {
-          if (this.checked) {
-            if (layer instanceof L.LayerGroup) {
-              layer.addTo(map);
-            } else if (layer instanceof L.TileLayer) {
-              layer.addTo(map);
-            }
-          } else {
-            if (layer instanceof L.LayerGroup) {
-              map.removeLayer(layer);
-            } else if (layer instanceof L.TileLayer) {
-              map.removeLayer(layer);
-            }
-          }
+        if (this.checked && analysisState[config.period]) {
+          showOnlyActivePeriod(config.period);
         }
       });
     }
@@ -97,12 +172,10 @@ const periods = {
 };
 
 function loadS1Median(startDate, endDate) {
-  // Use GeoJSON AOI for more precise area definition
   const geometry = ee.FeatureCollection([
     ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
   ]).geometry();
   
-  // Load Sentinel-1 GRD data with more detailed filtering
   return ee.ImageCollection('COPERNICUS/S1_GRD')
     .filterBounds(geometry)
     .filterDate(startDate, endDate)
@@ -133,12 +206,10 @@ function refinedLeeSimple(img) {
 }
 
 function filteredVV(startDate, endDate) {
-  // Use GeoJSON AOI for more precise area definition
   const geometry = ee.FeatureCollection([
     ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
   ]).geometry();
   
-  // Apply speckle filtering pipeline
   const med = loadS1Median(startDate, endDate);
   const nat = toNatural(med);
   const filtNat = refinedLeeSimple(nat);
@@ -146,44 +217,34 @@ function filteredVV(startDate, endDate) {
   return db.clip(geometry);
 }
 
-
 function detectFlood(preStart, preEnd, duringStart, duringEnd, threshold) {
   threshold = threshold || 1.25;
   
-  // Use GeoJSON AOI for more precise area definition
   const geometry = ee.FeatureCollection([
     ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
   ]).geometry();
   
-  // Get pre and during flood images with speckle filtering
   const preVV = filteredVV(preStart, preEnd);
   const postVV = filteredVV(duringStart, duringEnd);
   
-  // Get reference datasets
   const gsw = ee.Image("JRC/GSW1_4/GlobalSurfaceWater").clip(geometry);
   const hydrosheds = ee.Image("WWF/HydroSHEDS/03VFDEM").clip(geometry);
   const terrain = ee.Algorithms.Terrain(hydrosheds);
   const slope = terrain.select('slope');
   
-  // Calculate change ratio between pre and post images
   const preSafe = preVV.unmask(1e-6);
   const change = postVV.divide(preSafe).rename('change_ratio');
   
-  // Detect potential flood areas
   const floodedRaw = change.gt(threshold).rename('flood_raw').selfMask();
   
-  // Apply filters to reduce false positives
   const permWater = gsw.select('seasonality').gte(5).clip(geometry);
   const floodedNoPerm = floodedRaw.where(permWater, 0).selfMask();
   
-  // Remove steep slopes from flood detection
   const floodedSlopeMask = floodedNoPerm.updateMask(slope.lt(5));
   
-  // Apply connected pixel filter to remove noise
   const connections = floodedSlopeMask.connectedPixelCount(25);
   const floodedClean = floodedSlopeMask.updateMask(connections.gt(8)).rename('flood');
   
-  // Return only what's needed
   return {
     floodedClean: floodedClean,
     hydrosheds: hydrosheds,
@@ -192,12 +253,10 @@ function detectFlood(preStart, preEnd, duringStart, duringEnd, threshold) {
 }
 
 function generateRiskZones() {
-  // Use GeoJSON AOI for more precise area definition
   const geometry = ee.FeatureCollection([
     ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
   ]).geometry();
   
-  // Get required datasets
   const hydrosheds = ee.Image("WWF/HydroSHEDS/03VFDEM").clip(geometry);
   const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
     .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
@@ -205,78 +264,66 @@ function generateRiskZones() {
     .clip(geometry);
   const gsw = ee.Image("JRC/GSW1_4/GlobalSurfaceWater").clip(geometry);
   
-  // Convert object to array for Earth Engine
   const subareasArray = Object.entries(bekasiAreas).map(([name, coords]) => ({
     name: name,
     lon: coords[0],
     lat: coords[1]
   }));
   
-  // Create feature collection
   const subFeatures = ee.FeatureCollection(subareasArray.map(area => 
     ee.Feature(ee.Geometry.Point([area.lon, area.lat]), {name: area.name})
   ));
   
-  // Calculate risk score for each subarea
   const scored = subFeatures.map(function(f) {
     const buff = f.geometry().buffer(3000);
     
-    // Get elevation data with error handling
     const elevDict = hydrosheds.reduceRegion({
       reducer: ee.Reducer.mean(), 
       geometry: buff, 
       scale: 90
     });
-    // Use ee.Algorithms.If to handle missing keys
     const elev = ee.Algorithms.If(
       elevDict.contains('b1'),
       elevDict.get('b1'),
-      50  // Default elevation value if missing
+      50
     );
     
-    // Get population data with error handling
     const popDict = population.reduceRegion({
       reducer: ee.Reducer.sum(), 
       geometry: buff, 
       scale: 100
     });
-    // Use ee.Algorithms.If to handle missing keys
     const popsum = ee.Algorithms.If(
       popDict.contains('population_count'),
       popDict.get('population_count'),
       0
     );
     
-    // Get water occurrence data with error handling
     const jrcDict = gsw.select('occurrence').reduceRegion({
       reducer: ee.Reducer.mean(), 
       geometry: buff, 
       scale: 90
     });
-    // Use ee.Algorithms.If to handle missing keys
     const jrcmean = ee.Algorithms.If(
       jrcDict.contains('occurrence'),
       jrcDict.get('occurrence'),
       0
     );
     
-    // Ensure all values are valid numbers with defaults
     const elevValue = ee.Number(ee.Algorithms.If(elev, elev, 50));
     const popsumValue = ee.Number(ee.Algorithms.If(popsum, popsum, 0));
     const jrcmeanValue = ee.Number(ee.Algorithms.If(jrcmean, jrcmean, 0));
     
-    // Calculate risk score with null-safe operations
     const score = ee.Number(100)
-      .subtract(elevValue.multiply(1.2))  // Lower elevation = higher risk
-      .add(popsumValue.divide(ee.Number(1000)).multiply(10))  // Higher population = higher risk
-      .add(jrcmeanValue.divide(ee.Number(10)).multiply(8));  // Higher water occurrence = higher risk
+      .subtract(elevValue.multiply(1.2))
+      .add(popsumValue.divide(ee.Number(1000)).multiply(10))
+      .add(jrcmeanValue.divide(ee.Number(10)).multiply(8));
     
     return f.set({
       risk_score: score
     });
   });
   
-  // Categorize risk zones and add risk_level property
   const lowRisk = scored.filter(ee.Filter.lt('risk_score', 30))
     .map(feature => feature.set({risk_level: 'low'}));
     
@@ -288,7 +335,6 @@ function generateRiskZones() {
   const highRisk = scored.filter(ee.Filter.gte('risk_score', 70))
     .map(feature => feature.set({risk_level: 'high'}));
   
-  // Merge all features with their risk levels
   const allWithRiskLevel = lowRisk.merge(medRisk).merge(highRisk);
   
   return {
@@ -300,11 +346,9 @@ function generateRiskZones() {
 }
 
 export function runFloodAnalysis(period) {
-  // Show loader
   document.getElementById('analysis-loader').classList.remove('d-none');
   console.log(`Running ${periods[period].label} analysis...`);
   
-  // Show layer toggles if not already visible
   const layerToggles = document.getElementById('layer-toggles');
   if (layerToggles && layerToggles.classList.contains('d-none')) {
     layerToggles.classList.remove('d-none');
@@ -312,68 +356,52 @@ export function runFloodAnalysis(period) {
   
   return new Promise((resolve, reject) => {
     try {
-      
       if (period === 'pre') {
-        // Run pre-flood analysis (risk assessment)
-
-        // Generate risk zones for all periods
         const riskZones = generateRiskZones();
         
-        // Add risk zones to the main map
         addRiskZonesToMap(riskZones);
         
         try {
           riskZones.all.evaluate(function(riskData) {
-            // Hide loader
             document.getElementById('analysis-loader').classList.add('d-none');
             
             try {
-              // Check if riskData exists and has features
               if (riskData && riskData.features && riskData.features.length > 0) {
-                // Create results panel for pre-flood analysis
                 createPreFloodPanel(riskData.features);
-                
-                // Store risk data for comparison maps
                 window.riskData = riskData;
                 
-                // Update analysis state and sync all toggles
+                // Update state first
                 updateAnalysisState('pre', true);
                 
-                // Always create flood analysis layers for comparison maps
-                // This ensures layers are ready even if we're not in comparison mode yet
+                // Then show only this period
+                showOnlyActivePeriod('pre');
+                
                 createComparisonFloodLayers();
                 
                 console.log('Pre-flood risk analysis complete');
               } else {
-                // Handle the error case
-                console.log('Error: Could not retrieve risk data');
                 console.error('Risk data is undefined or missing features', riskData);
                 createErrorPanel('Could not retrieve risk zone data. Please try again.');
               }
             } catch (innerError) {
               console.error('Error processing risk data:', innerError);
-              console.log('Error processing risk data');
               createErrorPanel('Error processing risk zone data: ' + innerError.message);
             }
             
             resolve();
           }, function(error) {
-            // Error callback for evaluate
             document.getElementById('analysis-loader').classList.add('d-none');
             console.error('Earth Engine error:', error);
-            console.log('Earth Engine error: ' + error.message);
             createErrorPanel('Earth Engine error: ' + error.message);
             resolve();
           });
         } catch (outerError) {
           document.getElementById('analysis-loader').classList.add('d-none');
           console.error('Error in pre-flood analysis:', outerError);
-          console.log('Error in pre-flood analysis');
           createErrorPanel('Error in pre-flood analysis: ' + outerError.message);
           resolve();
         }
       } else if (period === 'during') {
-        // Run during-flood analysis
         const result = detectFlood(
           periods.pre.start, 
           periods.pre.end, 
@@ -382,66 +410,59 @@ export function runFloodAnalysis(period) {
           1.25
         );
         
-        // Create the flood layer
-        const layerName = 'Flooded Areas (During)';
-        
-        // Add the layer to the map control instead of directly to the map
         result.floodedClean.getMap({min: 0, max: 1, palette: ['#ff0000']}, function(tileLayer) {
-          // Create a Leaflet tile layer from the Earth Engine tiles
           const floodTileLayer = L.tileLayer(tileLayer.urlFormat, {
             attribution: "Google Earth Engine",
             opacity: 0.7,
+            zIndex: 1000, // High z-index to ensure visibility above basemap
+            pane: 'overlayPane' // Use overlay pane
           });
           
-          // Set the layer in overlays
-          const layerName = period === 'during' ? 'During-Flood Analysis' : 'Post-Flood Analysis';
+          const layerName = 'During-Flood Analysis';
           
-          // Remove existing layer if it exists
           if (overlays[layerName] && overlays[layerName] instanceof L.TileLayer) {
             map.removeLayer(overlays[layerName]);
           }
           
           overlays[layerName] = floodTileLayer;
           
-          // Update analysis state and sync all toggles
-          updateAnalysisState(period, true);
-          floodTileLayer.addTo(map);
+          // Update state first
+          updateAnalysisState('during', true);
           
-          // Always create flood analysis layers for comparison maps
-          // This ensures layers are ready even if we're not in comparison mode yet
+          // Then show only this period
+          showOnlyActivePeriod('during');
+          
+          // Add to map and bring to front
+          floodTileLayer.addTo(map);
+          setTimeout(() => {
+            if (map.hasLayer(floodTileLayer)) {
+              floodTileLayer.bringToFront();
+            }
+          }, 100);
+          
           createComparisonFloodLayers();
           
-          // Add opacity slider
           if (addOpacitySliderToMap) {
             addOpacitySliderToMap(map, floodTileLayer, layerName);
           }
           
-          // Calculate hotspots
           const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
             .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
             .first();
-          
+
           const floodedArea = result.floodedClean.multiply(ee.Image.pixelArea()).divide(1e6);
           const affectedPop = population.multiply(result.floodedClean);
           
-          // Convert bekasiAreas object to array of features
-          const subareasArray = Object.entries(bekasiAreas).map(([name, coords]) => {
-            return {
-              name: name,
-              lon: coords[0],
-              lat: coords[1]
-            };
-          });
-          
-          // Create feature collection for subareas
-          const subFeatures = ee.FeatureCollection(subareasArray.map(area => {
-            return ee.Feature(
-              ee.Geometry.Point([area.lon, area.lat]), 
-              {name: area.name}
-            );
+          const subareasArray = Object.entries(bekasiAreas).map(([name, coords]) => ({
+            name: name,
+            lon: coords[0],
+            lat: coords[1]
           }));
           
-          // Calculate hotspots
+          const subFeatures = ee.FeatureCollection(subareasArray.map(area => 
+            ee.Feature(ee.Geometry.Point([area.lon, area.lat]), {name: area.name})
+          ));
+          
           const hotspots = subFeatures.map(function(f) {
             const buff = f.geometry().buffer(3000);
             const frac = result.floodedClean.unmask(0).reduceRegion({
@@ -464,7 +485,6 @@ export function runFloodAnalysis(period) {
             });
           }).sort('flood_frac', false);
           
-          // Calculate total stats
           const totalStats = {
             floodArea: floodedArea.reduceRegion({
               reducer: ee.Reducer.sum(),
@@ -479,92 +499,155 @@ export function runFloodAnalysis(period) {
               maxPixels: 1e9
             })
           };
-          
-          // Evaluate and display results
+
           totalStats.floodArea.evaluate(function(floodArea) {
             totalStats.affectedPop.evaluate(function(affectedPop) {
               hotspots.limit(3).evaluate(function(hotspotData) {
-                // Hide loader
-                document.getElementById('analysis-loader').classList.add('d-none');
-                
-                try {
-                  // Check if we have valid data
-                  if (!hotspotData || !hotspotData.features || hotspotData.features.length === 0) {
-                    throw new Error('No flood hotspot data available');
-                  }
-                  
-                  // Create results panel for during-flood
-                  createResultsPanel({
-                    floodArea: floodArea && floodArea.flood ? floodArea.flood : 0,
-                    affectedPop: affectedPop && affectedPop.population_count ? affectedPop.population_count : 0,
-                    hotspots: hotspotData.features.map(f => ({
-                      name: f.properties.name,
-                      floodFrac: f.properties.flood_frac || 0,
-                      popExposed: f.properties.pop_exposed || 0
-                    }))
-                  });
-                  
-                  console.log('Flood analysis complete');
-                } catch (error) {
-                  console.error('Error in during-flood analysis:', error);
-                  console.log('Error in flood analysis');
-                  createErrorPanel('Could not process flood data. Please try again.');
+              document.getElementById('analysis-loader').classList.add('d-none');
+              
+              try {
+                if (!hotspotData || !hotspotData.features || hotspotData.features.length === 0) {
+                  throw new Error('No flood hotspot data available');
                 }
                 
-                resolve();
-              });
+                // Create markers for flooded hotspots during flood period
+                const duringFloodHotspotMarkers = L.layerGroup();
+                
+                hotspotData.features.forEach(feature => {
+                  if (feature.properties.flood_frac > 0) {
+                    const coords = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+                    
+                    // Get risk level from pre-flood data if available
+                    let riskLevel = 'unknown';
+                    let riskColor = '#ff0000'; // Default red for during-flood
+                    
+                    if (window.riskData && window.riskData.features) {
+                      const matchingRisk = window.riskData.features.find(
+                        rf => rf.properties.name === feature.properties.name
+                      );
+                      if (matchingRisk) {
+                        riskLevel = matchingRisk.properties.risk_level || 'unknown';
+                        // Use different shades of red/orange based on risk level
+                        if (riskLevel === 'high') riskColor = '#cc0000'; // Dark red
+                        else if (riskLevel === 'medium') riskColor = '#ff6600'; // Orange-red
+                        else riskColor = '#ff0000'; // Standard red
+                      }
+                    }
+                    
+                    const pinSvg = `
+                      <svg width="24" height="36" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 0C5.4 0 0 5.4 0 12c0 8 10 20 11 21.5a1 1 0 0 0 2 0C14 32 24 20 24 12 24 5.4 18.6 0 12 0z" 
+                              fill="${riskColor}" stroke="white" stroke-width="2"/>
+                        <circle cx="12" cy="12" r="4" fill="white"/>
+                      </svg>
+                    `;
+                    
+                    const markerIcon = L.divIcon({
+                      className: 'custom-flooded-marker',
+                      html: pinSvg,
+                      iconSize: [24, 36],
+                      iconAnchor: [12, 36],
+                      popupAnchor: [0, -36]
+                    });
+                    
+                    const marker = L.marker(coords, {
+                      icon: markerIcon,
+                      title: feature.properties.name
+                    });
+                    
+                    const floodPercent = (feature.properties.flood_frac * 100).toFixed(1);
+                    const popExposed = Math.round(feature.properties.pop_exposed || 0).toLocaleString();
+                    
+                    marker.bindPopup(`
+                      <div class="area-popup">
+                        <h5>${feature.properties.name}</h5>
+                        <p><strong>Status:</strong> <span class="text-danger">Currently Flooded</span></p>
+                        <p><strong>Flooded Area:</strong> ${floodPercent}%</p>
+                        <p><strong>People Affected:</strong> ${popExposed}</p>
+                        ${riskLevel !== 'unknown' ? `<p><strong>Pre-Flood Risk:</strong> <span style="color: ${riskColor}; font-weight: bold; text-transform: uppercase;">${riskLevel}</span></p>` : ''}
+                        ${riskLevel === 'high' ? '<p class="text-danger"><small><strong>⚠️ CRITICAL PRIORITY AREA</strong></small></p>' : ''}
+                      </div>
+                    `);
+                    
+                    marker.addTo(duringFloodHotspotMarkers);
+                  }
+                });
+                
+                // Add during-flood hotspot markers to overlays and map
+                overlays['During-Flood Hotspots'] = duringFloodHotspotMarkers;
+                duringFloodHotspotMarkers.addTo(map);
+                
+                createResultsPanel({
+                  floodArea: floodArea && floodArea.flood ? floodArea.flood : 0,
+                  affectedPop: affectedPop && affectedPop.population_count ? affectedPop.population_count : 0,
+                  hotspots: hotspotData.features.map(f => ({
+                    name: f.properties.name,
+                    floodFrac: f.properties.flood_frac || 0,
+                    popExposed: f.properties.pop_exposed || 0
+                  }))
+                });
+                
+                console.log('Flood analysis complete');
+              } catch (error) {
+                console.error('Error in during-flood analysis:', error);
+                createErrorPanel('Could not process flood data. Please try again.');
+              }
+              
+              resolve();
+            });
             });
           });
         });
       } else if (period === 'post') {
-        // Run post-flood analysis
+        // Remove during-flood hotspot markers when switching to post-flood
+        if (overlays['During-Flood Hotspots']) {
+          map.removeLayer(overlays['During-Flood Hotspots']);
+        }
+        
         const result = detectFlood(
           periods.pre.start, 
           periods.pre.end, 
           periods.post.start, 
           periods.post.end, 
-          1.35 // Higher threshold for post-flood to reduce false positives
+          1.35
         );
         
-        // Create the flood layer
-        const layerName = 'Flooded Areas (Post)';
-        
-        // Add the layer to the map
         result.floodedClean.getMap({min: 0, max: 1, palette: ['#0000ff']}, function(tileLayer) {
-          // Create a Leaflet tile layer
           const floodTileLayer = L.tileLayer(tileLayer.urlFormat, {
             attribution: "Google Earth Engine",
             opacity: 0.7,
-            zIndex: 10
+            zIndex: 1000, // High z-index to ensure visibility above basemap
+            pane: 'overlayPane' // Use overlay pane
           });
           
-          // Set the layer in overlays
           const layerName = 'Post-Flood Analysis';
           
-          // Remove existing layer if it exists
           if (overlays[layerName] && overlays[layerName] instanceof L.TileLayer) {
             map.removeLayer(overlays[layerName]);
           }
           
-          // Set new layer and add to map
           overlays[layerName] = floodTileLayer;
           
-          // Update analysis state and sync all toggles
+          // Update state first
           updateAnalysisState('post', true);
           
-          // Add layer to map
-          overlays[layerName].addTo(map);
+          // Then show only this period
+          showOnlyActivePeriod('post');
           
-          // Always create flood analysis layers for comparison maps
-          // This ensures layers are ready even if we're not in comparison mode yet
+          // Add to map and bring to front
+          floodTileLayer.addTo(map);
+          setTimeout(() => {
+            if (map.hasLayer(floodTileLayer)) {
+              floodTileLayer.bringToFront();
+            }
+          }, 100);
+          
           createComparisonFloodLayers();
           
-          // Add opacity slider
           if (addOpacitySliderToMap) {
             addOpacitySliderToMap(map, floodTileLayer, layerName);
           }
           
-          // Calculate hotspots
           const population = ee.ImageCollection("CIESIN/GPWv411/GPW_Population_Count")
             .filter(ee.Filter.date('2020-01-01', '2020-12-31'))
             .first();
@@ -572,24 +655,16 @@ export function runFloodAnalysis(period) {
           const floodedArea = result.floodedClean.multiply(ee.Image.pixelArea()).divide(1e6);
           const affectedPop = population.multiply(result.floodedClean);
           
-          // Convert bekasiAreas object to array of features
-          const subareasArray = Object.entries(bekasiAreas).map(([name, coords]) => {
-            return {
-              name: name,
-              lon: coords[0],
-              lat: coords[1]
-            };
-          });
-          
-          // Create feature collection for subareas
-          const subFeatures = ee.FeatureCollection(subareasArray.map(area => {
-            return ee.Feature(
-              ee.Geometry.Point([area.lon, area.lat]), 
-              {name: area.name}
-            );
+          const subareasArray = Object.entries(bekasiAreas).map(([name, coords]) => ({
+            name: name,
+            lon: coords[0],
+            lat: coords[1]
           }));
           
-          // Calculate hotspots
+          const subFeatures = ee.FeatureCollection(subareasArray.map(area => 
+            ee.Feature(ee.Geometry.Point([area.lon, area.lat]), {name: area.name})
+          ));
+          
           const hotspots = subFeatures.map(function(f) {
             const buff = f.geometry().buffer(3000);
             const frac = result.floodedClean.unmask(0).reduceRegion({
@@ -604,7 +679,6 @@ export function runFloodAnalysis(period) {
             });
           }).sort('flood_frac', false).filter(ee.Filter.gt('flood_frac', 0));
           
-          // Calculate total stats
           const totalStats = {
             floodArea: floodedArea.reduceRegion({
               reducer: ee.Reducer.sum(),
@@ -620,23 +694,88 @@ export function runFloodAnalysis(period) {
             })
           };
           
-          // Evaluate and display results
           totalStats.floodArea.evaluate(function(floodArea) {
             totalStats.affectedPop.evaluate(function(affectedPop) {
               hotspots.limit(3).evaluate(function(hotspotData) {
-                // Hide loader
                 document.getElementById('analysis-loader').classList.add('d-none');
                 
                 try {
-                  // Check if we have valid data
                   if (!hotspotData || !hotspotData.features) {
                     throw new Error('No post-flood data available');
                   }
                   
-                  // Create results panel for post-flood
+                  // Create markers for flooded hotspots
+                  const floodedHotspotMarkers = L.layerGroup();
+                  
+                  hotspotData.features.forEach(feature => {
+                    if (feature.properties.flood_frac > 0) {
+                      const coords = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
+                      
+                      // Get risk level from pre-flood data if available
+                      let riskLevel = 'unknown';
+                      let riskColor = '#0000ff'; // Default blue for flooded areas
+                      
+                      if (window.riskData && window.riskData.features) {
+                        const matchingRisk = window.riskData.features.find(
+                          rf => rf.properties.name === feature.properties.name
+                        );
+                        if (matchingRisk) {
+                          riskLevel = matchingRisk.properties.risk_level || 'unknown';
+                          // Use different colors based on risk level
+                          if (riskLevel === 'high') riskColor = '#ff0000';
+                          else if (riskLevel === 'medium') riskColor = '#ff9900';
+                          else riskColor = '#0000ff';
+                        }
+                      }
+                      
+                      const pinSvg = `
+                        <svg width="24" height="36" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M12 0C5.4 0 0 5.4 0 12c0 8 10 20 11 21.5a1 1 0 0 0 2 0C14 32 24 20 24 12 24 5.4 18.6 0 12 0z" 
+                                fill="${riskColor}" stroke="white" stroke-width="2"/>
+                          <circle cx="12" cy="12" r="4" fill="white"/>
+                        </svg>
+                      `;
+                      
+                      const markerIcon = L.divIcon({
+                        className: 'custom-flooded-marker',
+                        html: pinSvg,
+                        iconSize: [24, 36],
+                        iconAnchor: [12, 36],
+                        popupAnchor: [0, -36]
+                      });
+                      
+                      const marker = L.marker(coords, {
+                        icon: markerIcon,
+                        title: feature.properties.name
+                      });
+                      
+                      const floodPercent = (feature.properties.flood_frac * 100).toFixed(1);
+                      
+                      marker.bindPopup(`
+                        <div class="area-popup">
+                          <h5>${feature.properties.name}</h5>
+                          <p><strong>Status:</strong> <span class="text-danger">Still Flooded</span></p>
+                          <p><strong>Flooded Area:</strong> ${floodPercent}%</p>
+                          ${riskLevel !== 'unknown' ? `<p><strong>Pre-Flood Risk:</strong> <span style="color: ${riskColor}; font-weight: bold; text-transform: uppercase;">${riskLevel}</span></p>` : ''}
+                          ${riskLevel === 'high' ? '<p class="text-danger"><small><strong>⚠️ HIGH PRIORITY FOR RECOVERY</strong></small></p>' : ''}
+                        </div>
+                      `);
+                      
+                      marker.addTo(floodedHotspotMarkers);
+                    }
+                  });
+                  
+                  // Add flooded hotspot markers to overlays and map
+                  overlays['Post-Flood Hotspots'] = floodedHotspotMarkers;
+                  floodedHotspotMarkers.addTo(map);
+                  const totalFloodedArea = floodArea && floodArea.flood ? floodArea.flood : 0;
+                  const totalAffectedPop = affectedPop && affectedPop.population_count ? affectedPop.population_count : 0;
+                  const populationDensity = totalFloodedArea > 0 ? (totalAffectedPop / totalFloodedArea) : 0;
+      
                   createPostFloodPanel({
                     floodArea: floodArea && floodArea.flood ? floodArea.flood : 0,
                     affectedPop: affectedPop && affectedPop.population_count ? affectedPop.population_count : 0,
+                    popDensity: populationDensity,
                     hotspots: hotspotData.features.map(f => ({
                       name: f.properties.name,
                       floodFrac: f.properties.flood_frac || 0
@@ -646,7 +785,6 @@ export function runFloodAnalysis(period) {
                   console.log('Post-flood analysis complete');
                 } catch (error) {
                   console.error('Error in post-flood analysis:', error);
-                  console.log('Error in post-flood analysis');
                   createErrorPanel('Could not process post-flood data. Please try again.');
                 }
                 
@@ -656,7 +794,6 @@ export function runFloodAnalysis(period) {
           });
         });
       } else {
-        // Invalid period
         document.getElementById('analysis-loader').classList.add('d-none');
         console.log(`Invalid analysis period: ${period}`);
         reject(new Error(`Invalid analysis period: ${period}`));
@@ -669,167 +806,173 @@ export function runFloodAnalysis(period) {
   });
 }
 
+
 function addRiskZonesToMap(riskZones) {
-  // Create a single layer group for all risk zones
   const riskZoneGroup = L.layerGroup();
+  const highAlertGroup = L.layerGroup(); // Separate layer for high-risk markers
   
-  /**
-   * Helper function to add markers to the risk zone group
-   * @param {ee.FeatureCollection} features - Features to add
-   * @param {string} color - Color for the zone
-   * @param {string} riskLevel - Risk level (Low, Medium, High)
-   */
-  function addRiskMarkers(features, color, riskLevel) {
+  function addRiskMarkers(features, color, riskLevel, addToHighAlert = false) {
     features.evaluate(function(data) {
       if (!data || !data.features || data.features.length === 0) return;
       
-      // Add each feature to the layer group
       data.features.forEach(feature => {
-        // Get coordinates
         const coords = [feature.geometry.coordinates[1], feature.geometry.coordinates[0]];
         
-        // Create marker with custom icon based on risk level
+        // Create a custom pin-shaped SVG icon
+        const pinSvg = `
+          <svg width="24" height="36" viewBox="0 0 24 36" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 0C5.4 0 0 5.4 0 12c0 8 10 20 11 21.5a1 1 0 0 0 2 0C14 32 24 20 24 12 24 5.4 18.6 0 12 0z" 
+                  fill="${color}" stroke="white" stroke-width="2"/>
+            <circle cx="12" cy="12" r="4" fill="white"/>
+          </svg>
+        `;
+        
         const markerIcon = L.divIcon({
-          className: 'custom-marker',
-          html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>`,
-          iconSize: [16, 16],
-          iconAnchor: [8, 8]
+          className: 'custom-risk-marker',
+          html: pinSvg,
+          iconSize: [24, 36],
+          iconAnchor: [12, 36],
+          popupAnchor: [0, -36]
         });
         
-        // Create marker
         const marker = L.marker(coords, {
           icon: markerIcon,
           title: feature.properties.name
         });
         
-        // Format coordinates for display
         const lat = coords[0].toFixed(6);
         const lon = coords[1].toFixed(6);
         
-        // Add popup with detailed information
-        marker.bindPopup(`
+        const popupContent = `
           <div class="area-popup">
             <h5>${feature.properties.name}</h5>
-            <p><strong>Risk Level:</strong> ${riskLevel}</p>
+            <p><strong>Risk Level:</strong> <span style="color: ${color}; font-weight: bold;">${riskLevel}</span></p>
             <p><strong>Coordinates:</strong> ${lat}, ${lon}</p>
             <p><strong>Risk Score:</strong> ${feature.properties.risk_score.toFixed(1)}</p>
+            ${addToHighAlert ? '<p class="text-danger"><small><strong>⚠️ HIGH ALERT AREA</strong></small></p>' : ''}
           </div>
-        `);
+        `;
         
-        // Add marker to the risk zone group
+        marker.bindPopup(popupContent);
+        
+        // Add to main risk zone group
         marker.addTo(riskZoneGroup);
+        
+        // Also add high-risk markers to persistent high alert layer
+        if (addToHighAlert) {
+          const highAlertMarker = L.marker(coords, {
+            icon: markerIcon,
+            title: feature.properties.name + ' (High Alert)'
+          });
+          highAlertMarker.bindPopup(popupContent);
+          highAlertMarker.addTo(highAlertGroup);
+        }
       });
     });
   }
-
   
-  // Add all risk zones to the single layer group
-  addRiskMarkers(riskZones.low, '#00ff00', 'Low');
-  addRiskMarkers(riskZones.medium, '#ffff00', 'Medium');
-  addRiskMarkers(riskZones.high, '#ff0000', 'High');
+  // Add markers - only high-risk markers go to both layers
+  addRiskMarkers(riskZones.low, '#00ff00', 'Low', false);
+  addRiskMarkers(riskZones.medium, '#ffbb00ff', 'Medium', false);
+  addRiskMarkers(riskZones.high, '#ff0000', 'High', true); // Add to both layers
   
-  // Set the layer in overlays
   const layerName = 'Pre-Flood Analysis';
   
-  // Remove existing layer if it exists
   if (overlays[layerName]) {
     map.removeLayer(overlays[layerName]);
   }
   
-  // Set new layer and add to map
   overlays[layerName] = riskZoneGroup;
-  overlays[layerName].addTo(map);
   
-  // Check the toggle
+  // Store high alert layer globally and add to overlays
+  persistentHighAlertLayer = highAlertGroup;
+  overlays['High Alert Areas'] = highAlertGroup;
+  
+  // Don't add to map yet - let showOnlyActivePeriod handle it
   const toggle = document.getElementById('toggle-pre-flood');
   if (toggle) {
     toggle.checked = true;
   }
 }
 
-/**
- * Create results panel for pre-flood analysis
- * @param {Array} riskData - Risk data features
- */
 function createPreFloodPanel(riskData) {
-  // Create or get results panel
   let resultsPanel = document.getElementById('flood-results');
   if (!resultsPanel) {
     resultsPanel = document.createElement('div');
     resultsPanel.style.position = 'relative';
     resultsPanel.id = 'flood-results';
-    resultsPanel.className = 'mt-3 p-3 bg-light border rounded';
+    resultsPanel.className = 'mt-3 p-3 border rounded bg-body text-body';
     resultsPanel.style.height = '100%';
     document.querySelector('#analysis-sidebar').appendChild(resultsPanel);
   }
   
-  // Sort risk data by risk score
   riskData.sort((a, b) => b.properties.risk_score - a.properties.risk_score);
+
+  const highRiskAreas = riskData.filter(area => area.properties.risk_level === 'high');
   
-  // Create HTML content
+  // ⬇️ Replace from: let html = ` ... ` up to before resultsPanel.innerHTML
   let html = `
-    <h5>Pre-Flood Risk Assessment</h5>
-    <div class="alert alert-warning">
-      <strong>Risk Assessment Complete</strong>
+    <h5 class="d-flex align-items-center">
+      <i class="bi bi-water me-2"></i>Pre-Flood Risk Assessment
+    </h5>
+
+    <div class="alert alert-warning d-flex align-items-center">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i>
+      <div><strong>Risk Assessment Complete</strong></div>
     </div>
+
     <p>This analysis identifies areas at risk of flooding based on:</p>
-    <ul>
-      <li>Elevation data</li>
-      <li>Population density</li>
-      <li>Historical water occurrence</li>
+    <ul class="list-unstyled ps-0">
+      <li class="mb-1"><i class="bi bi-graph-up me-2"></i>Elevation data</li>
+      <li class="mb-1"><i class="bi bi-people-fill me-2"></i>Population density</li>
+      <li class="mb-1"><i class="bi bi-droplet-fill me-2"></i>Historical water occurrence</li>
     </ul>
-    
-    <h6 class="mt-3">High Risk Areas:</h6>
-    <ul>
+
+    <h6 class="mt-3 text-danger d-flex align-items-center">
+      <i class="bi bi-exclamation-octagon-fill me-2"></i>High Risk Areas:
+    </h6>
+    <ul class="mb-0">
   `;
-  
-  // Add high risk areas
-  const highRiskAreas = riskData.filter(f => f.properties.risk_score >= 70);
+
+  // ⬇️ Replace your forEach item template
   highRiskAreas.forEach(area => {
-    html += `<li><strong>${area.properties.name}</strong></li>`;
+    html += `<li><i class="bi bi-geo-alt-fill text-danger me-1"></i><strong>${area.properties.name}</strong></li>`;
   });
-  
+
+  // ⬇️ Replace your "no items" fallback
   if (highRiskAreas.length === 0) {
-    html += '<li>No high risk areas identified</li>';
+    html += '<li><i class="bi bi-check-circle text-success me-1"></i>No high risk areas identified</li>';
   }
-  
+
   html += `
     </ul>
-    
-    <h6 class="mt-3 text-primary">Preparedness Recommendations:</h6>
+
+    <h6 class="mt-3 text-primary d-flex align-items-center">
+      <i class="bi bi-lightbulb-fill me-2"></i>Preparedness Recommendations:
+    </h6>
     <div class="recommendations p-2 border-start border-4 border-primary">
       <ul class="mb-0">
-        <li><strong>Early Warning:</strong> Establish early warning systems in high risk areas.</li>
-        <li><strong>Evacuation Planning:</strong> Develop evacuation routes and safe zones.</li>
-        <li><strong>Infrastructure:</strong> Reinforce flood defenses in high risk areas.</li>
-        <li><strong>Community Education:</strong> Conduct flood preparedness training.</li>
-        <li><strong>Emergency Supplies:</strong> Pre-position emergency supplies in strategic locations.</li>
+        <li class="mb-1"><i class="bi bi-bell-fill me-2"></i><strong>Early Warning:</strong> Establish early warning systems in high risk areas.</li>
+        <li class="mb-1"><i class="bi bi-signpost-2-fill me-2"></i><strong>Evacuation Planning:</strong> Develop evacuation routes and safe zones.</li>
+        <li class="mb-1"><i class="bi bi-tools me-2"></i><strong>Infrastructure:</strong> Reinforce flood defenses in high risk areas.</li>
+        <li class="mb-1"><i class="bi bi-mortarboard-fill me-2"></i><strong>Community Education:</strong> Conduct flood preparedness training.</li>
+        <li class="mb-1"><i class="bi bi-box-seam-fill me-2"></i><strong>Emergency Supplies:</strong> Pre-position emergency supplies in strategic locations.</li>
       </ul>
     </div>
   `;
-  
+
   resultsPanel.innerHTML = html;
 }
 
-/**
- * Create results panel for post-flood analysis
- * @param {Object} results - Analysis results
- */
-/**
- * Create error panel to display error messages
- * @param {string} errorMessage - Error message to display
- */
 function createErrorPanel(errorMessage) {
-  // Create or get results panel
   let resultsPanel = document.getElementById('flood-results');
   if (!resultsPanel) {
     resultsPanel = document.createElement('div');
     resultsPanel.id = 'flood-results';
-    resultsPanel.className = 'mt-3 p-3 bg-light border rounded';
+    resultsPanel.className = 'mt-3 p-3 border rounded bg-body text-body';
     document.querySelector('#analysis-sidebar').appendChild(resultsPanel);
   }
   
-  // Create HTML content with error message
   const html = `
     <h5>Analysis Error</h5>
     <div class="alert alert-danger">
@@ -842,53 +985,84 @@ function createErrorPanel(errorMessage) {
       <li>Try selecting a different time period</li>
     </ul>
   `;
-  
   resultsPanel.innerHTML = html;
 }
 
 function createPostFloodPanel(results) {
-  // Create or get results panel
   let resultsPanel = document.getElementById('flood-results');
   if (!resultsPanel) {
     resultsPanel = document.createElement('div');
     resultsPanel.id = 'flood-results';
-    resultsPanel.className = 'mt-3 p-3 bg-light border rounded';
+    resultsPanel.className = 'mt-3 p-3 border rounded bg-body text-body';
     document.querySelector('#analysis-sidebar').appendChild(resultsPanel);
   }
   
-  // Format results
   const floodAreaKm2 = results.floodArea.toFixed(2);
   const affectedPopulation = Math.round(results.affectedPop).toLocaleString();
+  const populationDensity = results.popDensity ? results.popDensity.toFixed(2) : '0.00'; // ✅ Calculate density
   
-  // Create HTML content
+  // Count high-risk flooded areas
+  let highRiskFloodedCount = 0;
+  if (window.riskData && window.riskData.features) {
+    highRiskFloodedCount = results.hotspots.filter(hotspot => {
+      const matchingRisk = window.riskData.features.find(
+        rf => rf.properties.name === hotspot.name
+      );
+      return matchingRisk && matchingRisk.properties.risk_level === 'high' && hotspot.floodFrac > 0;
+    }).length;
+  }
+  
   let html = `
     <h5>Post-Flood Analysis Results</h5>
     <div class="alert alert-info">
       <strong>Recovery Phase</strong>
     </div>
+    
+    ${highRiskFloodedCount > 0 ? `
+    <div class="alert alert-danger mb-3">
+      <strong>⚠️ ${highRiskFloodedCount} High-Risk Area${highRiskFloodedCount > 1 ? 's' : ''} Still Flooded</strong>
+      <p class="mb-0 small">Red markers indicate high-priority areas that need immediate attention.</p>
+    </div>
+    ` : ''}
+    
     <p><strong>Remaining Flooded Area:</strong> ${floodAreaKm2} km²</p>
     <p><strong>People Still Affected:</strong> ${affectedPopulation}</p>
+    <p><strong>Population Density on Flooded Zone:</strong> ${populationDensity} people/km²</p>
   `;
   
-  // Add areas still flooded
   if (results.hotspots && results.hotspots.length > 0) {
-    html += `<h6>Areas Still Flooded:</h6><ul>`;
-    results.hotspots.forEach(hotspot => {
-      const floodPercent = (hotspot.floodFrac * 100).toFixed(1);
-      html += `<li><strong>${hotspot.name}</strong>: ${floodPercent}% still flooded</li>`;
-    });
-    html += '</ul>';
+    const floodedAreas = results.hotspots.filter(h => h.floodFrac > 0);
+    if (floodedAreas.length > 0) {
+      html += `<h6>Areas Still Flooded:</h6><ul>`;
+      floodedAreas.forEach(hotspot => {
+        const floodPercent = (hotspot.floodFrac * 100).toFixed(1);
+        
+        // Check if this area is high-risk
+        let isHighRisk = false;
+        if (window.riskData && window.riskData.features) {
+          const matchingRisk = window.riskData.features.find(
+            rf => rf.properties.name === hotspot.name
+          );
+          isHighRisk = matchingRisk && matchingRisk.properties.risk_level === 'high';
+        }
+        
+        html += `<li><strong>${hotspot.name}</strong>: ${floodPercent}% still flooded${isHighRisk ? ' <span class="text-danger">⚠️ HIGH RISK</span>' : ''}</li>`;
+      });
+      html += '</ul>';
+    } else {
+      html += '<p class="text-success"><strong>✓ No significant flooding detected in monitored areas</strong></p>';
+    }
   }
   
-  // Add recovery recommendations
   html += `
     <h6 class="mt-4 text-primary">Recovery Recommendations:</h6>
     <div class="recommendations p-2 border-start border-4 border-primary">
       <ul class="mb-0">
-        <li><strong>Infrastructure Repair:</strong> Prioritize repair of critical infrastructure in ${results.hotspots[0]?.name || 'affected areas'}.</li>
+        <li><strong>Priority Areas:</strong> Focus on areas marked with red pins (high-risk + still flooded).</li>
+        <li><strong>Infrastructure Repair:</strong> Prioritize repair of critical infrastructure in ${results.hotspots.filter(h => h.floodFrac > 0)[0]?.name || 'affected areas'}.</li>
         <li><strong>Health Monitoring:</strong> Monitor for waterborne diseases in recently flooded areas.</li>
         <li><strong>Damage Assessment:</strong> Complete detailed damage assessments for insurance and aid.</li>
-        <li><strong>Debris Removal:</strong> Organize community cleanup efforts.</li>
+        <li><strong>Debris Removal:</strong> Organize community cleanup efforts in flooded zones.</li>
         <li><strong>Financial Assistance:</strong> Provide information on available disaster relief programs.</li>
       </ul>
     </div>
@@ -897,29 +1071,20 @@ function createPostFloodPanel(results) {
   resultsPanel.innerHTML = html;
 }
 
-/**
- * Create results panel to display flood analysis results
- * @param {Object} results - Analysis results
- */
 function createResultsPanel(results) {
-  // Create or get results panel
   let resultsPanel = document.getElementById('flood-results');
   if (!resultsPanel) {
     resultsPanel = document.createElement('div');
     resultsPanel.id = 'flood-results';
-    resultsPanel.className = 'mt-3 p-3 bg-white border rounded';
-    // Append to sidebar instead of controls
+    resultsPanel.className = 'mt-3 p-3 border rounded bg-body text-body';
     document.getElementById('analysis-sidebar').appendChild(resultsPanel);
     
-    // Make sure sidebar is visible when results are shown
     document.getElementById('analysis-sidebar').classList.add('show');
   }
   
-  // Format results
   const floodAreaKm2 = results.floodArea.toFixed(2);
   const affectedPopulation = Math.round(results.affectedPop).toLocaleString();
   
-  // Determine severity level based on affected population
   let severityLevel = 'Low';
   let severityClass = 'text-success';
   
@@ -934,7 +1099,6 @@ function createResultsPanel(results) {
     severityClass = 'text-primary';
   }
   
-  // Create HTML content
   let html = `
     <h5>Flood Analysis Results</h5>
     <div class="alert alert-${severityClass === 'text-danger' ? 'danger' : (severityClass === 'text-warning' ? 'warning' : 'info')}">
@@ -946,7 +1110,6 @@ function createResultsPanel(results) {
     <ul>
   `;
   
-  // Add hotspots
   results.hotspots.forEach(hotspot => {
     const floodPercent = (hotspot.floodFrac * 100).toFixed(1);
     const popExposed = Math.round(hotspot.popExposed).toLocaleString();
@@ -955,14 +1118,12 @@ function createResultsPanel(results) {
   
   html += '</ul>';
   
-  // Add recommendations section
   html += `
     <h6 class="mt-4 text-primary">Recommendations:</h6>
     <div class="recommendations p-2 border-start border-4 border-primary">
       <ul class="mb-0">
   `;
   
-  // Add hardcoded recommendations based on severity
   if (severityLevel === 'Critical') {
     html += `
         <li><strong>Immediate Evacuation:</strong> Coordinate evacuation of ${results.hotspots[0].name} and ${results.hotspots.length > 1 ? results.hotspots[1].name : ''} areas.</li>

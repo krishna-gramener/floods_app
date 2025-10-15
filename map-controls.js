@@ -21,18 +21,23 @@ let legend;
 let isComparisonMode = false;
 
 /**
+ * Custom control class for the Basemap Gallery to give it a unique icon class.
+ */
+const BasemapGalleryControl = L.Control.Layers.extend({
+    onAdd: function (map) {
+        const container = L.Control.Layers.prototype.onAdd.call(this, map);
+        L.DomUtil.addClass(container, 'leaflet-control-basemap-gallery'); 
+        return container;
+    }
+});
+
+// A helper function to create an instance of the custom control
+function basemapControl(baseLayers, overlays, options) {
+    return new BasemapGalleryControl(baseLayers, overlays, options);
+}
+
+/**
  * Initialize the map controls module with references
- * @param {Object} mainMap - The main map instance
- * @param {Object} mainLayers - The main map layers collection
- * @param {Object} mainOverlays - The main map overlays collection
- * @param {Object} leftMap - The left comparison map instance
- * @param {Object} leftLayers - The left map layers collection
- * @param {Object} rightMap - The right comparison map instance
- * @param {Object} rightLayers - The right map layers collection
- * @param {Object} bounds - The Bekasi bounds object
- * @param {boolean} comparisonMode - Whether the app is in comparison mode
- * @param {Function} removeOpacitySliderForLayerFn - Function to remove opacity slider for a layer
- * @param {Function} removeAllOpacitySlidersFn - Function to remove all opacity sliders
  */
 export function initMapControls(mainMap, mainLayers, mainOverlays, leftMap, leftLayers, rightMap, rightLayers, bounds, comparisonMode, removeOpacitySliderForLayerFn, removeAllOpacitySlidersFn) {
   map = mainMap;
@@ -55,7 +60,6 @@ export function initMap() {
   
   if (!bekasiBounds) {
     console.error('bekasiBounds is not defined');
-    // Use default Bekasi coordinates if bounds not provided
     bekasiBounds = {
       bounds: [[-6.45, 106.88], [-6.10, 107.15]],
       center: [-6.275, 107.015]
@@ -65,45 +69,38 @@ export function initMap() {
   // Create the map centered on Bekasi
   map = L.map('map', {
     center: bekasiBounds.center,
-    zoom: 13, // Slightly higher zoom for better detail
+    zoom: 12,
+    zoomControl: false, 
     fullscreenControl: true,
     fullscreenControlOptions: {
-      position: 'topleft'
+      position: 'topright'
     }
   });
   
   // Add base layers
   addBaseLayers();
   
-  // Add Bekasi boundary using GeoJSON
-  const aoiCoordinates = [
-    [
-      [107.06234950376387, -6.213090828568937],
-      [106.9242495370928, -6.213090828568937],
-      [106.9242495370928, -6.348589327912876],
-      [107.06234950376387, -6.348589327912876],
-      [107.06234950376387, -6.213090828568937]
-    ]
-  ];
+  // DON'T add the Bekasi boundary by default
+  // It will only be shown when user checks the "Bekasi AOI" checkbox
   
-  // Convert GeoJSON coordinates to Leaflet format (swap lat/lng)
-  const leafletCoords = aoiCoordinates[0].map(coord => [coord[1], coord[0]]);
-  
-  // Add polygon to map
-  L.polygon(leafletCoords, {
-    color: '#000',
-    weight: 2,
-    fillOpacity: 0.05,
-    fillColor: '#3388ff'
-  }).addTo(map).bindPopup('Bekasi Study Area - March 2025 Flood Zone');
-  
-  // Add layer control for base maps and overlays
-  const layerControl = L.control.layers(baseMaps, {}, {
-    position: 'topright',
-    collapsed: false
+  // Layer Control 1: Basemap Gallery (Base layers only, custom icon)
+  basemapControl(baseMaps, null, {
+    position: 'topleft', 
+    collapsed: true 
+  }).addTo(map);
+
+  // Layer Control 2: Layer List (Overlays only, default icon)
+  const layerControl = L.control.layers(null, {}, {
+    position: 'topleft', 
+    collapsed: true 
+  }).addTo(map);
+
+  // Custom zoom control at bottomright
+  L.control.zoom({
+    position: 'bottomright'
   }).addTo(map);
   
-  // Add data layers to the control
+  // Add data layers to the Layer List control
   layerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
   layerControl.addOverlay(createDummyLayer(), 'Elevation');
   layerControl.addOverlay(createDummyLayer(), 'Population');
@@ -131,7 +128,7 @@ export function initMap() {
     } else if (layerName === 'Surface Water') {
       showGSW();
       showLegend('Surface Water');
-    } else if (layerName === 'Building Footprints') {
+    }else if (layerName === 'Building Footprints') {
       showBuildingFootprints();
       showLegend('Building Footprints');
     }
@@ -152,11 +149,17 @@ export function initMap() {
       clearLayer('Population');
       removeOpacitySliderForLayer('main', 'Population');
       hideLegend('Population');
+      // Remove population click handler
+      if (map._populationClickHandler) {
+        map.off('click', map._populationClickHandler);
+        delete map._populationClickHandler;
+        console.log('Population click handler removed from main map');
+      }
     } else if (layerName === 'Surface Water') {
       clearLayer('Surface Water');
       removeOpacitySliderForLayer('main', 'Surface Water');
       hideLegend('Surface Water');
-    } else if (layerName === 'Building Footprints') {
+    }else if (layerName === 'Building Footprints') {
       clearLayer('Building Footprints');
       removeOpacitySliderForLayer('main', 'Building Footprints');
       hideLegend('Building Footprints');
@@ -172,14 +175,14 @@ export function initMap() {
     
     // Re-add all active overlays to ensure they're on top of the new base layer
     Object.keys(overlays).forEach(function(layerName) {
-      if (map.hasLayer(overlays[layerName])) {
+      if (overlays[layerName] && map.hasLayer(overllays[layerName])) {
         overlays[layerName].bringToFront();
       }
     });
   });
   
   // Create legend control
-  legend = L.control({position: 'bottomright'});
+  legend = L.control({position: 'bottomleft'});
   legend.onAdd = function() {
     const div = L.DomUtil.create('div', 'legend');
     div.innerHTML = '<div id="legend-content"></div>';
@@ -196,8 +199,7 @@ export function initMap() {
  * Add base layers to the main map
  */
 export function addBaseLayers() {
-  // Create base maps
-  baseMaps = {}; // Use the global baseMaps variable
+  baseMaps = {};
   baseMaps["Normal"] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   });
@@ -205,8 +207,7 @@ export function addBaseLayers() {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
   });
   
-  // Add default base layer
-  baseMaps["Normal"].addTo(map);
+  baseMaps["Satellite"].addTo(map);
   
   return baseMaps;
 }
@@ -221,71 +222,57 @@ export function toggleComparisonView() {
   const compareFullscreenButton = document.getElementById('compare-fullscreen-button');
   
   if (!isComparisonMode) {
-    // Switch to comparison view
     mapContainer.style.display = 'none';
     comparisonContainer.style.display = 'flex';
     compareButton.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
     compareButton.title = 'Return to single map view';
     
-    // Show the fullscreen comparison button
     compareFullscreenButton.classList.remove('d-none');
     compareFullscreenButton.classList.add('d-inline-block');
     
-    // Remove all opacity sliders from main map
     removeAllOpacitySliders('main');
     
-    // Initialize comparison maps if not already done
     if (!mapLeft || !mapRight) {
       initComparisonMaps();
     } else {
-      // Update the view to match the main map
       mapLeft.setView(map.getCenter(), map.getZoom());
       mapRight.setView(map.getCenter(), map.getZoom());
     }
     
     isComparisonMode = true;
     
-    // Update isComparisonMode in flood-analysis module
     if (window.updateFloodAnalysisComparisonMode) {
       window.updateFloodAnalysisComparisonMode(true);
     }
   } else {
-    // Switch back to single map view
     mapContainer.style.display = 'block';
     comparisonContainer.style.display = 'none';
     compareButton.innerHTML = '<i class="bi bi-layout-split"></i>';
     compareButton.title = 'Toggle comparison view';
     
-    // Hide the fullscreen comparison button
     compareFullscreenButton.classList.remove('d-inline-block');
     compareFullscreenButton.classList.add('d-none');
     
-    // Exit fullscreen if we're in fullscreen mode
     if (document.fullscreenElement) {
       document.exitFullscreen();
     }
     
-    // Update the main map view to match the comparison maps
     if (mapLeft) {
       map.setView(mapLeft.getCenter(), mapLeft.getZoom());
     }
     
-    // Remove all opacity sliders from comparison maps
     removeAllOpacitySliders('left');
     removeAllOpacitySliders('right');
     
-    // Restore main map layers and their opacity sliders
     refreshMainMapLayers();
     
     isComparisonMode = false;
     
-    // Update isComparisonMode in flood-analysis module
     if (window.updateFloodAnalysisComparisonMode) {
       window.updateFloodAnalysisComparisonMode(false);
     }
   }
   
-  // Invalidate size to ensure proper rendering after display changes
   setTimeout(function() {
     if (map) map.invalidateSize();
     if (mapLeft) mapLeft.invalidateSize();
@@ -301,34 +288,31 @@ export function toggleComparisonFullscreen() {
   const compareFullscreenButton = document.getElementById('compare-fullscreen-button');
   
   if (!document.fullscreenElement) {
-    // Enter fullscreen
     if (comparisonContainer.requestFullscreen) {
       comparisonContainer.requestFullscreen();
-    } else if (comparisonContainer.mozRequestFullScreen) { // Firefox
+    } else if (comparisonContainer.mozRequestFullScreen) {
       comparisonContainer.mozRequestFullScreen();
-    } else if (comparisonContainer.webkitRequestFullscreen) { // Chrome, Safari and Opera
+    } else if (comparisonContainer.webkitRequestFullscreen) {
       comparisonContainer.webkitRequestFullscreen();
-    } else if (comparisonContainer.msRequestFullscreen) { // IE/Edge
+    } else if (comparisonContainer.msRequestFullscreen) {
       comparisonContainer.msRequestFullscreen();
     }
     compareFullscreenButton.innerHTML = '<i class="bi bi-fullscreen-exit"></i>';
     compareFullscreenButton.title = 'Exit fullscreen comparison';
   } else {
-    // Exit fullscreen
     if (document.exitFullscreen) {
       document.exitFullscreen();
-    } else if (document.mozCancelFullScreen) { // Firefox
+    } else if (document.mozCancelFullScreen) {
       document.mozCancelFullScreen();
-    } else if (document.webkitExitFullscreen) { // Chrome, Safari and Opera
+    } else if (document.webkitExitFullscreen) {
       document.webkitExitFullscreen();
-    } else if (document.msExitFullscreen) { // IE/Edge
+    } else if (document.msExitFullscreen) {
       document.msExitFullscreen();
     }
     compareFullscreenButton.innerHTML = '<i class="bi bi-fullscreen"></i>';
     compareFullscreenButton.title = 'Fullscreen comparison';
   }
   
-  // Invalidate size to ensure proper rendering after fullscreen changes
   setTimeout(function() {
     if (mapLeft) mapLeft.invalidateSize();
     if (mapRight) mapRight.invalidateSize();
@@ -339,34 +323,38 @@ export function toggleComparisonFullscreen() {
  * Initialize the comparison maps
  */
 export function initComparisonMaps() {
-  // Create left map
   const leftMap = L.map('map-left', {
+    zoomControl: false, 
     fullscreenControl: true,
     fullscreenControlOptions: {
       position: 'topleft'
     }
   }).setView(bekasiBounds.center, 12);
   
-  // Create right map
   const rightMap = L.map('map-right', {
+    zoomControl: false, 
     fullscreenControl: true,
     fullscreenControlOptions: {
       position: 'topleft'
     }
   }).setView(bekasiBounds.center, 12);
   
-  // Store maps in module scope
   mapLeft = leftMap;
   mapRight = rightMap;
+
+  // Custom zoom control at bottomright
+  L.control.zoom({
+    position: 'bottomright'
+  }).addTo(leftMap);
+  L.control.zoom({
+    position: 'bottomright'
+  }).addTo(rightMap);
   
-  // Add base layers to comparison maps
   addBaseLayersToComparisonMaps();
   
-  // Add coordinates display to both maps
   addCoordinatesDisplay(leftMap, 'bottomleft');
   addCoordinatesDisplay(rightMap, 'bottomleft');
   
-  // Synchronize map movements (optional)
   leftMap.on('move', function() {
     rightMap.setView(leftMap.getCenter(), leftMap.getZoom(), {
       animate: false
@@ -380,17 +368,12 @@ export function initComparisonMaps() {
   });
   
   return { mapLeft: leftMap, mapRight: rightMap };
-
-  // Return initialized maps
-  return { mapLeft, mapRight };
-
 }
 
 /**
  * Add base layers to comparison maps
  */
 export function addBaseLayersToComparisonMaps() {
-  // Create base layers for left map
   const leftBaseMaps = {};
   leftBaseMaps["Normal"] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -399,7 +382,6 @@ export function addBaseLayersToComparisonMaps() {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
   });
   
-  // Create base layers for right map
   const rightBaseMaps = {};
   rightBaseMaps["Normal"] = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -408,48 +390,48 @@ export function addBaseLayersToComparisonMaps() {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
   });
   
-  // Add default base layers
-  leftBaseMaps["Normal"].addTo(mapLeft);
+  leftBaseMaps["Satellite"].addTo(mapLeft);
   rightBaseMaps["Satellite"].addTo(mapRight);
   
-  // Add layer controls with empty overlays initially
-  const leftLayerControl = L.control.layers(leftBaseMaps, {}, {
-    position: 'topright',
-    collapsed: false
+  // Layer Control 1: Basemap Gallery (Base layers only, custom icon)
+  const leftBaseControl = basemapControl(leftBaseMaps, null, {
+    position: 'topleft', 
+    collapsed: true
   }).addTo(mapLeft);
   
-  const rightLayerControl = L.control.layers(rightBaseMaps, {}, {
-    position: 'topright',
-    collapsed: false
+  // Layer Control 2: Layer List (Overlays only, default icon)
+  const leftLayerControl = L.control.layers(null, {}, {
+    position: 'topleft', 
+    collapsed: true
+  }).addTo(mapLeft);
+
+  // Layer Control 1: Basemap Gallery (Base layers only, custom icon)
+  const rightBaseControl = basemapControl(rightBaseMaps, null, {
+    position: 'topleft', 
+    collapsed: true
   }).addTo(mapRight);
   
-  // Add data layers to the controls
+  // Layer Control 2: Layer List (Overlays only, default icon)
+  const rightLayerControl = L.control.layers(null, {}, {
+    position: 'topleft', 
+    collapsed: true
+  }).addTo(mapRight);
+  
+  // Add overlays to the Layer List controls
   leftLayerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
   leftLayerControl.addOverlay(createDummyLayer(), 'Elevation');
   leftLayerControl.addOverlay(createDummyLayer(), 'Population');
   leftLayerControl.addOverlay(createDummyLayer(), 'Surface Water');
   leftLayerControl.addOverlay(createDummyLayer(), 'Building Footprints');
-  
   rightLayerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
   rightLayerControl.addOverlay(createDummyLayer(), 'Elevation');
   rightLayerControl.addOverlay(createDummyLayer(), 'Population');
   rightLayerControl.addOverlay(createDummyLayer(), 'Surface Water');
   rightLayerControl.addOverlay(createDummyLayer(), 'Building Footprints');
   
-  // Add Bekasi boundary to both maps
-  L.rectangle(bekasiBounds.bounds, {
-    color: 'black',
-    weight: 2,
-    fillOpacity: 0,
-  }).addTo(mapLeft).bindPopup('Bekasi Study Area');
+  // DON'T add black border by default to comparison maps either
+  // Users need to check "Bekasi AOI" checkbox to see the boundary
   
-  L.rectangle(bekasiBounds.bounds, {
-    color: 'black',
-    weight: 2,
-    fillOpacity: 0,
-  }).addTo(mapRight).bindPopup('Bekasi Study Area');
-  
-  // Add event listeners for left map overlay changes
   mapLeft.on('overlayadd', function(e) {
     const layerName = e.name;
     console.log(`Layer added to left map: ${layerName}`);
@@ -462,7 +444,7 @@ export function addBaseLayersToComparisonMaps() {
       showPopulationOnMap(mapLeft, layersLeft, layerName);
     } else if (layerName === 'Surface Water') {
       showGSWOnMap(mapLeft, layersLeft, layerName);
-    } else if (layerName === 'Building Footprints') {
+    }else if (layerName === 'Building Footprints') {
       showBuildingFootprintsOnMap(mapLeft, layersLeft, layerName);
     }
   });
@@ -475,12 +457,9 @@ export function addBaseLayersToComparisonMaps() {
       mapLeft.removeLayer(layersLeft[layerName]);
       delete layersLeft[layerName];
       removeOpacitySliderForLayer('left', layerName);
-      
-      // No need to check for legend visibility on comparison maps
     }
   });
   
-  // Add event listeners for right map overlay changes
   mapRight.on('overlayadd', function(e) {
     const layerName = e.name;
     console.log(`Layer added to right map: ${layerName}`);
@@ -506,19 +485,14 @@ export function addBaseLayersToComparisonMaps() {
       mapRight.removeLayer(layersRight[layerName]);
       delete layersRight[layerName];
       removeOpacitySliderForLayer('right', layerName);
-      
-      // No need to check for legend visibility on comparison maps
     }
   });
 }
 
 /**
  * Add coordinates display to a specific map
- * @param {L.Map} targetMap - The map to add the slider to
- * @param {string} position - The position on the map ('bottomleft', 'bottomright', etc.)
  */
 export function addCoordinatesDisplay(targetMap, position) {
-  // Create a unique class for this map's coordinates display
   const mapId = targetMap === map ? 'main' : (targetMap === mapLeft ? 'left' : 'right');
   const coordsClass = `coordinates-control-${mapId}`;
   
@@ -527,23 +501,20 @@ export function addCoordinatesDisplay(targetMap, position) {
   coordsDisplay.onAdd = function(map) {
     const div = L.DomUtil.create('div', `leaflet-control leaflet-bar ${coordsClass}`);
     div.innerHTML = 'Lat: 0.00000, Lng: 0.00000';
-    div.style.backgroundColor = 'white';
+    // div.style.backgroundColor = 'white';
     div.style.padding = '5px 10px';
     div.style.fontSize = '12px';
     div.style.borderRadius = '4px';
     div.style.boxShadow = '0 1px 5px rgba(0,0,0,0.4)';
-    div.style.zIndex = '1000'; // Ensure it's always on top
+    div.style.zIndex = '1000';
     return div;
   };
   
-  // Add the control to the map
   coordsDisplay.addTo(targetMap);
   
-  // Update coordinates on mouse move
   targetMap.on('mousemove', function(e) {
     const lat = e.latlng.lat.toFixed(5);
     const lng = e.latlng.lng.toFixed(5);
-    // Find the coordinates control using the unique class
     const coordsElement = targetMap.getContainer().querySelector(`.${coordsClass}`);
     if (coordsElement) {
       coordsElement.innerHTML = `Lat: ${lat}, Lng: ${lng}`;
