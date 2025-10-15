@@ -1,6 +1,6 @@
 // Map control functions for the Bekasi Flood Monitoring System
 // import { updateStatus } from './utils.js';
-import { showDEM, showPopulation, showGSW, showAOI, showDEMOnMap, showPopulationOnMap, showGSWOnMap, showAOIOnMap, clearLayer, refreshMainMapLayers } from './layers.js';
+import { showDEM, showPopulation, showGSW, showAOI, showBuildingFootprints, showDEMOnMap, showPopulationOnMap, showGSWOnMap, showAOIOnMap, showBuildingFootprintsOnMap, clearLayer, refreshMainMapLayers } from './layers.js';
 import { showLegend, hideLegend } from './utils.js';
 import { bekasiBounds } from './config.js';
 
@@ -108,6 +108,7 @@ export function initMap() {
   layerControl.addOverlay(createDummyLayer(), 'Elevation');
   layerControl.addOverlay(createDummyLayer(), 'Population');
   layerControl.addOverlay(createDummyLayer(), 'Surface Water');
+  layerControl.addOverlay(createDummyLayer(), 'Building Footprints');
   
   // Initialize overlays object
   overlays['Pre-Flood Analysis'] = L.layerGroup();
@@ -130,6 +131,9 @@ export function initMap() {
     } else if (layerName === 'Surface Water') {
       showGSW();
       showLegend('Surface Water');
+    } else if (layerName === 'Building Footprints') {
+      showBuildingFootprints();
+      showLegend('Building Footprints');
     }
   });
   
@@ -152,6 +156,10 @@ export function initMap() {
       clearLayer('Surface Water');
       removeOpacitySliderForLayer('main', 'Surface Water');
       hideLegend('Surface Water');
+    } else if (layerName === 'Building Footprints') {
+      clearLayer('Building Footprints');
+      removeOpacitySliderForLayer('main', 'Building Footprints');
+      hideLegend('Building Footprints');
     }
   });
   
@@ -420,11 +428,13 @@ export function addBaseLayersToComparisonMaps() {
   leftLayerControl.addOverlay(createDummyLayer(), 'Elevation');
   leftLayerControl.addOverlay(createDummyLayer(), 'Population');
   leftLayerControl.addOverlay(createDummyLayer(), 'Surface Water');
+  leftLayerControl.addOverlay(createDummyLayer(), 'Building Footprints');
   
   rightLayerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
   rightLayerControl.addOverlay(createDummyLayer(), 'Elevation');
   rightLayerControl.addOverlay(createDummyLayer(), 'Population');
   rightLayerControl.addOverlay(createDummyLayer(), 'Surface Water');
+  rightLayerControl.addOverlay(createDummyLayer(), 'Building Footprints');
   
   // Add Bekasi boundary to both maps
   L.rectangle(bekasiBounds.bounds, {
@@ -452,6 +462,8 @@ export function addBaseLayersToComparisonMaps() {
       showPopulationOnMap(mapLeft, layersLeft, layerName);
     } else if (layerName === 'Surface Water') {
       showGSWOnMap(mapLeft, layersLeft, layerName);
+    } else if (layerName === 'Building Footprints') {
+      showBuildingFootprintsOnMap(mapLeft, layersLeft, layerName);
     }
   });
   
@@ -481,6 +493,8 @@ export function addBaseLayersToComparisonMaps() {
       showPopulationOnMap(mapRight, layersRight, layerName);
     } else if (layerName === 'Surface Water') {
       showGSWOnMap(mapRight, layersRight, layerName);
+    } else if (layerName === 'Building Footprints') {
+      showBuildingFootprintsOnMap(mapRight, layersRight, layerName);
     }
   });
   

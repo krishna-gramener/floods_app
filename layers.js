@@ -393,6 +393,68 @@ export function clearLayer(layerType) {
 }
 
 /**
+ * Show VIDA Building Footprints layer on the main map
+ */
+export function showBuildingFootprints() {
+  console.log('Loading VIDA Building Footprints data...');
+  
+  // Use GeoJSON AOI for more precise area definition
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
+  
+  // Load VIDA Combined Building Footprints for Indonesia and filter by AOI
+  const vidaBuildings = ee.FeatureCollection("projects/sat-io/open-datasets/VIDA_COMBINED/IDN")
+                          .filterBounds(bekasiGeometry);
+  
+  // Visualization parameters for building footprints
+  const buildingVis = {
+    color: '#FF5500',
+    width: 1,
+    fillColor: 'FF8800',
+    fillOpacity: 0.6
+  };
+  
+  // Add the layer to the map
+  addLayer(vidaBuildings, buildingVis, 'Building Footprints');
+  
+  // Update legend
+  createLegend('Buildings', 
+    ['#FF8800'],
+    ['VIDA Building Footprints'],
+    'Building Footprints');
+}
+
+/**
+ * Show VIDA Building Footprints layer on a specific map
+ * @param {L.Map} targetMap - The map to add the layer to
+ * @param {Object} layerCollection - The collection to store the layer in
+ * @param {string} layerName - The name for the layer
+ */
+export function showBuildingFootprintsOnMap(targetMap, layerCollection, layerName) {
+  // Use GeoJSON AOI for more precise area definition
+  const bekasiGeometry = ee.FeatureCollection([
+    ee.Feature(ee.Geometry.Polygon(bekasiGeoJSON.features[0].geometry.coordinates), {})
+  ]).geometry();
+  
+  // Load VIDA Combined Building Footprints for Indonesia and filter by AOI
+  const vidaBuildings = ee.FeatureCollection("projects/sat-io/open-datasets/VIDA_COMBINED/IDN")
+                          .filterBounds(bekasiGeometry);
+  
+  // Visualization parameters for building footprints
+  const buildingVis = {
+    color: '#FF5500',
+    width: 1,
+    fillColor: 'FF8800',
+    fillOpacity: 0.6,
+    opacity: 0.7
+  };
+  
+  // Add the layer to the map
+  addLayerToMap(targetMap, layerCollection, vidaBuildings, buildingVis, layerName);
+}
+
+/**
  * Refresh all layers on the main map
  * This ensures layers are properly displayed after switching back from comparison view
  */
