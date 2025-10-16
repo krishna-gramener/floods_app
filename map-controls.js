@@ -1,6 +1,6 @@
 // Map control functions for the Bekasi Flood Monitoring System
 // import { updateStatus } from './utils.js';
-import { showDEM, showPopulation, showGSW, showAOI, showBuildingFootprints, showDEMOnMap, showPopulationOnMap, showGSWOnMap, showAOIOnMap, showBuildingFootprintsOnMap, clearLayer, refreshMainMapLayers } from './layers.js';
+import { showDEM, showPopulation, showGSW, showAOI, showBuildingFootprints, showBekasiWards, showDEMOnMap, showPopulationOnMap, showGSWOnMap, showAOIOnMap, showBuildingFootprintsOnMap, showBekasiWardsOnMap, clearLayer, refreshMainMapLayers } from './layers.js';
 import { showLegend, hideLegend } from './utils.js';
 import { bekasiBounds } from './config.js';
 
@@ -55,144 +55,156 @@ export function initMapControls(mainMap, mainLayers, mainOverlays, leftMap, left
 /**
  * Initialize the main map
  */
+/**
+ * Initialize the main map
+ */
 export function initMap() {
-  console.log('Initializing map...');
-  
-  if (!bekasiBounds) {
-    console.error('bekasiBounds is not defined');
-    bekasiBounds = {
-      bounds: [[-6.45, 106.88], [-6.10, 107.15]],
-      center: [-6.275, 107.015]
-    };
-  }
-  
-  // Create the map centered on Bekasi
-  map = L.map('map', {
-    center: bekasiBounds.center,
-    zoom: 12,
-    zoomControl: false, 
-    fullscreenControl: true,
-    fullscreenControlOptions: {
-      position: 'topright'
-    }
-  });
-  
-  // Add base layers
-  addBaseLayers();
-  
-  // DON'T add the Bekasi boundary by default
-  // It will only be shown when user checks the "Bekasi AOI" checkbox
-  
-  // Layer Control 1: Basemap Gallery (Base layers only, custom icon)
-  basemapControl(baseMaps, null, {
-    position: 'topleft', 
-    collapsed: true 
-  }).addTo(map);
-
-  // Layer Control 2: Layer List (Overlays only, default icon)
-  const layerControl = L.control.layers(null, {}, {
-    position: 'topleft', 
-    collapsed: true 
-  }).addTo(map);
-
-  // Custom zoom control at bottomright
-  L.control.zoom({
-    position: 'bottomright'
-  }).addTo(map);
-  
-  // Add data layers to the Layer List control
-  layerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
-  layerControl.addOverlay(createDummyLayer(), 'Elevation');
-  layerControl.addOverlay(createDummyLayer(), 'Population');
-  layerControl.addOverlay(createDummyLayer(), 'Surface Water');
-  layerControl.addOverlay(createDummyLayer(), 'Building Footprints');
-  
-  // Initialize overlays object
-  overlays['Pre-Flood Analysis'] = L.layerGroup();
-  overlays['During-Flood Analysis'] = null;
-  overlays['Post-Flood Analysis'] = null;
-  
-  // Add event listeners for main map overlay checkboxes
-  map.on('overlayadd', function(e) {
-    const layerName = e.name;
-    console.log(`Layer added to main map: ${layerName}`);
+    console.log('Initializing map...');
     
-    if (layerName === 'Bekasi AOI') {
-      showAOI();
-    } else if (layerName === 'Elevation') {
-      showDEM();
-      showLegend('Elevation');
-    } else if (layerName === 'Population') {
-      showPopulation();
-      showLegend('Population');
-    } else if (layerName === 'Surface Water') {
-      showGSW();
-      showLegend('Surface Water');
-    }else if (layerName === 'Building Footprints') {
-      showBuildingFootprints();
-      showLegend('Building Footprints');
+    if (!bekasiBounds) {
+        console.error('bekasiBounds is not defined');
+        bekasiBounds = {
+            bounds: [[-6.45, 106.88], [-6.10, 107.15]],
+            center: [-6.275, 107.015]
+        };
     }
-  });
-  
-  map.on('overlayremove', function(e) {
-    const layerName = e.name;
-    console.log(`Layer removed from main map: ${layerName}`);
     
-    if (layerName === 'Bekasi AOI') {
-      clearLayer('Bekasi AOI');
-      removeOpacitySliderForLayer('main', 'Bekasi AOI');
-    } else if (layerName === 'Elevation') {
-      clearLayer('Elevation');
-      removeOpacitySliderForLayer('main', 'Elevation');
-      hideLegend('Elevation');
-    } else if (layerName === 'Population') {
-      clearLayer('Population');
-      removeOpacitySliderForLayer('main', 'Population');
-      hideLegend('Population');
-      // Remove population click handler
-      if (map._populationClickHandler) {
-        map.off('click', map._populationClickHandler);
-        delete map._populationClickHandler;
-        console.log('Population click handler removed from main map');
-      }
-    } else if (layerName === 'Surface Water') {
-      clearLayer('Surface Water');
-      removeOpacitySliderForLayer('main', 'Surface Water');
-      hideLegend('Surface Water');
-    }else if (layerName === 'Building Footprints') {
-      clearLayer('Building Footprints');
-      removeOpacitySliderForLayer('main', 'Building Footprints');
-      hideLegend('Building Footprints');
-    }
-  });
-  
-  // Add custom coordinates display to bottom left
-  addCoordinatesDisplay(map, 'bottomleft');
-  
-  // Handle base map changes to ensure overlays remain visible
-  map.on('baselayerchange', function(e) {
-    console.log('Base layer changed to:', e.name);
-    
-    // Re-add all active overlays to ensure they're on top of the new base layer
-    Object.keys(overlays).forEach(function(layerName) {
-      if (overlays[layerName] && map.hasLayer(overllays[layerName])) {
-        overlays[layerName].bringToFront();
-      }
+    // Create the map centered on Bekasi
+    map = L.map('map', {
+        center: bekasiBounds.center,
+        zoom: 12,
+        zoomControl: false, 
+        fullscreenControl: true,
+        fullscreenControlOptions: {
+            position: 'topright'
+        }
     });
-  });
-  
-  // Create legend control
-  legend = L.control({position: 'bottomleft'});
-  legend.onAdd = function() {
-    const div = L.DomUtil.create('div', 'legend');
-    div.innerHTML = '<div id="legend-content"></div>';
-    return div;
-  };
-  legend.addTo(map);
-  
-  console.log('Map initialized. Click a button to load data.');
-  
-  return map;
+    
+    // Add base layers
+    addBaseLayers();
+    
+    // DON'T add the Bekasi boundary by default
+    // It will only be shown when user checks the "Bekasi AOI" checkbox
+    
+    // Layer Control 1: Basemap Gallery (Base layers only, custom icon)
+    basemapControl(baseMaps, null, {
+        position: 'topleft', 
+        collapsed: true 
+    }).addTo(map);
+
+    // Layer Control 2: Layer List (Overlays only, default icon)
+    const layerControl = L.control.layers(null, {}, {
+        position: 'topleft', 
+        collapsed: true 
+    }).addTo(map);
+
+    // Custom zoom control at bottomright
+    L.control.zoom({
+        position: 'bottomright'
+    }).addTo(map);
+    
+    // Add data layers to the Layer List control
+    layerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
+    layerControl.addOverlay(createDummyLayer(), 'Elevation');
+    layerControl.addOverlay(createDummyLayer(), 'Population');
+    layerControl.addOverlay(createDummyLayer(), 'Surface Water');
+    layerControl.addOverlay(createDummyLayer(), 'Building Footprints');
+    layerControl.addOverlay(createDummyLayer(), 'Bekasi Wards');
+    
+    // Initialize overlays object
+    overlays['Pre-Flood Analysis'] = L.layerGroup();
+    overlays['During-Flood Analysis'] = null;
+    overlays['Post-Flood Analysis'] = null;
+    
+    // Add event listeners for main map overlay checkboxes
+    map.on('overlayadd', function(e) {
+        const layerName = e.name;
+        console.log(`Layer added to main map: ${layerName}`);
+        
+        if (layerName === 'Bekasi AOI') {
+            showAOI();
+        } else if (layerName === 'Elevation') {
+            showDEM();
+            showLegend('Elevation');
+        } else if (layerName === 'Population') {
+            showPopulation();
+            showLegend('Population');
+        } else if (layerName === 'Surface Water') {
+            showGSW();
+            showLegend('Surface Water');
+        }else if (layerName === 'Building Footprints') {
+            showBuildingFootprints();
+            showLegend('Building Footprints');
+        }else if (layerName === 'Bekasi Wards') {
+            showBekasiWards();
+            showLegend('Bekasi Wards');
+        }
+    });
+    
+    map.on('overlayremove', function(e) {
+        const layerName = e.name;
+        console.log(`Layer removed from main map: ${layerName}`);
+        
+        if (layerName === 'Bekasi AOI') {
+            clearLayer('Bekasi AOI');
+            removeOpacitySliderForLayer('main', 'Bekasi AOI');
+        } else if (layerName === 'Elevation') {
+            clearLayer('Elevation');
+            removeOpacitySliderForLayer('main', 'Elevation');
+            hideLegend('Elevation');
+        } else if (layerName === 'Population') {
+            clearLayer('Population');
+            removeOpacitySliderForLayer('main', 'Population');
+            hideLegend('Population');
+            // Remove population click handler
+            if (map._populationClickHandler) {
+                map.off('click', map._populationClickHandler);
+                delete map._populationClickHandler;
+                console.log('Population click handler removed from main map');
+            }
+        } else if (layerName === 'Surface Water') {
+            clearLayer('Surface Water');
+            removeOpacitySliderForLayer('main', 'Surface Water');
+            hideLegend('Surface Water');
+        }else if (layerName === 'Building Footprints') {
+            clearLayer('Building Footprints');
+            removeOpacitySliderForLayer('main', 'Building Footprints');
+            hideLegend('Building Footprints');
+        }else if (layerName === 'Bekasi Wards') {
+            clearLayer('Bekasi Wards');
+            removeOpacitySliderForLayer('main', 'Bekasi Wards');
+            hideLegend('Bekasi Wards');
+        }
+    });
+    
+    // Add custom coordinates display to bottom left
+    addCoordinatesDisplay(map, 'bottomleft');
+    
+    // Handle base map changes to ensure overlays remain visible
+    map.on('baselayerchange', function(e) {
+        console.log('Base layer changed to:', e.name);
+        
+        // Re-add all active overlays to ensure they're on top of the new base layer
+        Object.keys(overlays).forEach(function(layerName) {
+            // THE FIX IS HERE
+            if (overlays[layerName] && map.hasLayer(overlays[layerName])) {
+                overlays[layerName].bringToFront();
+            }
+        });
+    });
+    
+    // Create legend control
+    legend = L.control({position: 'bottomleft'});
+    legend.onAdd = function() {
+        const div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = '<div id="legend-content"></div>';
+        return div;
+    };
+    legend.addTo(map);
+    
+    console.log('Map initialized. Click a button to load data.');
+    
+    return map;
 }
 
 /**
@@ -423,12 +435,13 @@ export function addBaseLayersToComparisonMaps() {
   leftLayerControl.addOverlay(createDummyLayer(), 'Population');
   leftLayerControl.addOverlay(createDummyLayer(), 'Surface Water');
   leftLayerControl.addOverlay(createDummyLayer(), 'Building Footprints');
+  leftLayerControl.addOverlay(createDummyLayer(), 'Bekasi Wards');
   rightLayerControl.addOverlay(createDummyLayer(), 'Bekasi AOI');
   rightLayerControl.addOverlay(createDummyLayer(), 'Elevation');
   rightLayerControl.addOverlay(createDummyLayer(), 'Population');
   rightLayerControl.addOverlay(createDummyLayer(), 'Surface Water');
   rightLayerControl.addOverlay(createDummyLayer(), 'Building Footprints');
-  
+  rightLayerControl.addOverlay(createDummyLayer(), 'Bekasi Wards');
   // DON'T add black border by default to comparison maps either
   // Users need to check "Bekasi AOI" checkbox to see the boundary
   
@@ -444,8 +457,10 @@ export function addBaseLayersToComparisonMaps() {
       showPopulationOnMap(mapLeft, layersLeft, layerName);
     } else if (layerName === 'Surface Water') {
       showGSWOnMap(mapLeft, layersLeft, layerName);
-    }else if (layerName === 'Building Footprints') {
+    } else if (layerName === 'Building Footprints') {
       showBuildingFootprintsOnMap(mapLeft, layersLeft, layerName);
+    } else if (layerName === 'Bekasi Wards') {
+      showBekasiWardsOnMap(mapLeft, layersLeft, layerName);
     }
   });
   
@@ -474,6 +489,8 @@ export function addBaseLayersToComparisonMaps() {
       showGSWOnMap(mapRight, layersRight, layerName);
     } else if (layerName === 'Building Footprints') {
       showBuildingFootprintsOnMap(mapRight, layersRight, layerName);
+    } else if (layerName === 'Bekasi Wards') {
+      showBekasiWardsOnMap(mapRight, layersRight, layerName);
     }
   });
   

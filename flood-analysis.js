@@ -1013,7 +1013,9 @@ function createPostFloodPanel(results) {
   }
   
   let html = `
-    <h5>Post-Flood Analysis Results</h5>
+    <h5 class="d-flex align-items-center">
+      <i class="bi bi-water me-2"></i>Post-Flood Analysis Results
+    </h5>
     <div class="alert alert-info">
       <strong>Recovery Phase</strong>
     </div>
@@ -1024,12 +1026,10 @@ function createPostFloodPanel(results) {
       <p class="mb-0 small">Red markers indicate high-priority areas that need immediate attention.</p>
     </div>
     ` : ''}
-    
     <p><strong>Remaining Flooded Area:</strong> ${floodAreaKm2} km²</p>
-    <p><strong>People Still Affected:</strong> ${affectedPopulation}</p>
-    <p><strong>Population Density on Flooded Zone:</strong> ${populationDensity} people/km²</p>
   `;
-  
+  //<p><strong>People Still Affected:</strong> ${affectedPopulation}</p>
+  //<p><strong>Population Count on Flooded Zone:</strong> ${populationDensity} people/km²</p>
   if (results.hotspots && results.hotspots.length > 0) {
     const floodedAreas = results.hotspots.filter(h => h.floodFrac > 0);
     if (floodedAreas.length > 0) {
@@ -1058,7 +1058,7 @@ function createPostFloodPanel(results) {
     <h6 class="mt-4 text-primary">Recovery Recommendations:</h6>
     <div class="recommendations p-2 border-start border-4 border-primary">
       <ul class="mb-0">
-        <li><strong>Priority Areas:</strong> Focus on areas marked with red pins (high-risk + still flooded).</li>
+        <li><strong>Priority Areas:</strong> Focus on areas marked with blue pins (high-risk + still flooded).</li>
         <li><strong>Infrastructure Repair:</strong> Prioritize repair of critical infrastructure in ${results.hotspots.filter(h => h.floodFrac > 0)[0]?.name || 'affected areas'}.</li>
         <li><strong>Health Monitoring:</strong> Monitor for waterborne diseases in recently flooded areas.</li>
         <li><strong>Damage Assessment:</strong> Complete detailed damage assessments for insurance and aid.</li>
@@ -1100,21 +1100,27 @@ function createResultsPanel(results) {
   }
   
   let html = `
-    <h5>Flood Analysis Results</h5>
+    <h5 class="d-flex align-items-center">
+      <i class="bi bi-water me-2"></i>Flood Analysis Results
+    </h5>
     <div class="alert alert-${severityClass === 'text-danger' ? 'danger' : (severityClass === 'text-warning' ? 'warning' : 'info')}">
       <strong>Severity Level: <span class="${severityClass}">${severityLevel}</span></strong>
     </div>
     <p><strong>Total Flooded Area:</strong> ${floodAreaKm2} km²</p>
-    <p><strong>Estimated Affected Population:</strong> ${affectedPopulation}</p>
+
     <h6>Top Affected Areas:</h6>
     <ul>
   `;
+  // people affected removed
+  // <p><strong>Estimated Affected Population:</strong> ${affectedPopulation}</p>
   
   results.hotspots.forEach(hotspot => {
     const floodPercent = (hotspot.floodFrac * 100).toFixed(1);
     const popExposed = Math.round(hotspot.popExposed).toLocaleString();
-    html += `<li><strong>${hotspot.name}</strong>: ${floodPercent}% flooded, ${popExposed} people affected</li>`;
+    html += `<li><strong>${hotspot.name}</strong>: ${floodPercent}% flooded</li>`;
   });
+  // people affected removed
+  ///* , ${popExposed} people affected */
   
   html += '</ul>';
   

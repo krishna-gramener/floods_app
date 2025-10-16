@@ -1,4 +1,19 @@
-// Configuration for the Bekasi Flood Monitoring System
+// config.js
+
+export async function getBekasiWards() {
+  try {
+    const response = await fetch('./data/data_flood.geojson');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Failed to fetch Bekasi wards GeoJSON:', error);
+    // Return an empty object on failure to prevent the app from crashing
+    return { type: 'FeatureCollection', features: [] };
+  }
+}
 
 // Bekasi boundaries - updated to match GeoJSON AOI
 export const bekasiBounds = {

@@ -1,6 +1,7 @@
 // Layer management functions for the Bekasi Flood Monitoring System
 import { createLegend, showLegend, hideLegend } from './utils.js';
-import { bekasiBounds, bekasiGeoJSON } from './config.js';
+import { bekasiBounds, bekasiGeoJSON} from './config.js';
+import { getBekasiWards } from './config.js';
 
 // Import opacity slider function from script.js
 let addOpacitySliderToMap;
@@ -10,6 +11,34 @@ let map;
 let layers = {};
 let layersLeft = {};
 let layersRight = {};
+
+// --- NEW: Variables for GeoJSON interaction ---
+let highlightedLayer = null;
+let highlightedLayerLeft = null;
+let highlightedLayerRight = null;
+
+// --- NEW: Style definitions for the interactive wards layer ---
+const defaultStyle = {
+    color: "#007bff", // A nice blue for the border
+    weight: 1,
+    opacity: 0.9,
+    fillOpacity: 0.2,
+    fillColor: "#007bff"
+};
+
+const highlightStyle = {
+    color: '#ff4500', // A bright orange/red for highlight
+    weight: 3,
+    opacity: 1.0,
+    fillOpacity: 0.6,
+    fillColor: '#ff4500'
+};
+
+const hoverStyle = {
+    weight: 2,
+    color: '#666',
+    opacity: 1.0
+};
 
 /**
  * Initialize the layer management module with map references
@@ -139,7 +168,7 @@ export function showPopulation() {
     addPopulationClickHandler(map, population);
     
     // Create legend with relevant ranges only
-    createLegend('Population Density (persons/km²)', 
+    createLegend('Population (persons/km²)', 
       palette,
       labels,
       'Population');
@@ -196,7 +225,7 @@ function addPopulationClickHandler(targetMap, populationImage) {
           // Create popup content
           const popupContent = `
             <div style="padding: 5px;">
-              <strong>Population Density</strong><br>
+              <strong>Population</strong><br>
               <span style="font-size: 16px; color: #ff7504ff;">${roundedPop.toLocaleString()}</span> persons/km²<br>
               <small style="color: #50a302ff;">Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}</small>
             </div>
@@ -510,6 +539,134 @@ export function showGSW() {
     ['white', '#4292c6', '#08306b'],
     ['Rare', 'Occasional', 'Permanent'],
     'Surface Water');
+}
+
+export async function showBekasiWards() {
+    console.log('Loading interactive Bekasi wards boundaries...');
+
+    const bekasiWardsData = await getBekasiWards();
+
+    if (!bekasiWardsData || !bekasiWardsData.features || bekasiWardsData.features.length === 0) {
+        console.error('Bekasi wards data is not loaded or is empty.');
+        return;
+    }
+
+    const geoJsonLayer = L.geoJSON(bekasiWardsData, {
+        style: defaultStyle,
+        onEachFeature: (feature, layer) => {
+            layer.on({
+                mouseover: (e) => {
+                    if (e.target !== highlightedLayer) {
+                        e.target.setStyle(hoverStyle);
+                    }
+                },
+                mouseout: (e) => {
+                    if (e.target !== highlightedLayer) {
+                        geoJsonLayer.resetStyle(e.target);
+                    }
+                },
+                click: (e) => {
+                    if (highlightedLayer) {
+                        geoJsonLayer.resetStyle(highlightedLayer);
+                    }
+                    e.target.setStyle(highlightStyle);
+                    highlightedLayer = e.target;
+
+                    const props = feature.properties;
+                    const popupContent = `
+                        <div class="ward-popup">
+                            <h5>${props.Bekasi_Par || 'N/A'}</h5>
+                            <hr>
+                            <strong>Total Area:</strong> ${props.Total_Area ? props.Total_Area.toFixed(2) : 'N/A'} ha<br>
+                            <strong>Flooded Area:</strong> ${props.Flooded_Ar ? props.Flooded_Ar.toFixed(2) : 'N/A'} ha<br>
+                            <strong>Flood Percentage:</strong> ${props.Flood_Perc ? props.Flood_Perc.toFixed(1) + '%' : 'N/A'}
+                        </div>
+                    `;
+                    layer.bindPopup(popupContent).openPopup();
+                }
+            });
+        }
+    });
+
+    if (layers['Bekasi Wards']) {
+        map.removeLayer(layers['Bekasi Wards']);
+    }
+    layers['Bekasi Wards'] = geoJsonLayer;
+    geoJsonLayer.addTo(map);
+
+    if (addOpacitySliderToMap) {
+        addOpacitySliderToMap(map, geoJsonLayer, 'Bekasi Wards');
+    }
+
+    createLegend('Administrative Boundaries', ['#007bff'], ['Bekasi Wards'], 'Bekasi Wards');
+    console.log('Bekasi Wards GeoJSON layer added');
+}
+
+// --- REWRITTEN: showBekasiWardsOnMap ---
+/**
+ * Shows Bekasi Wards as an interactive GeoJSON layer on a comparison map.
+ */
+export async function showBekasiWardsOnMap(targetMap, layerCollection, layerName) {
+    console.log(`Loading interactive Bekasi wards for comparison map...`);
+
+    const bekasiWardsData = await getBekasiWards();
+    if (!bekasiWardsData || !bekasiWardsData.features || bekasiWardsData.features.length === 0) {
+        return;
+    }
+
+    const isLeftMap = targetMap === window.mapLeft;
+
+    const geoJsonLayer = L.geoJSON(bekasiWardsData, {
+        style: defaultStyle,
+        onEachFeature: (feature, layer) => {
+            layer.on({
+                mouseover: (e) => {
+                    const currentHighlight = isLeftMap ? highlightedLayerLeft : highlightedLayerRight;
+                    if (e.target !== currentHighlight) {
+                        e.target.setStyle(hoverStyle);
+                    }
+                },
+                mouseout: (e) => {
+                    const currentHighlight = isLeftMap ? highlightedLayerLeft : highlightedLayerRight;
+                    if (e.target !== currentHighlight) {
+                        geoJsonLayer.resetStyle(e.target);
+                    }
+                },
+                click: (e) => {
+                    let currentHighlight = isLeftMap ? highlightedLayerLeft : highlightedLayerRight;
+                    if (currentHighlight) {
+                        geoJsonLayer.resetStyle(currentHighlight);
+                    }
+                    e.target.setStyle(highlightStyle);
+                    if (isLeftMap) {
+                        highlightedLayerLeft = e.target;
+                    } else {
+                        highlightedLayerRight = e.target;
+                    }
+
+                    const props = feature.properties;
+                    const popupContent = `
+                        <div class="ward-popup">
+                            <h5>${props.Bekasi_Par || 'N/A'}</h5><hr>
+                            <strong>Total Area:</strong> ${props.Total_Area.toFixed(2)} ha<br>
+                            <strong>Flooded Area:</strong> ${props.Flooded_Ar.toFixed(2)} ha<br>
+                            <strong>Flood Percentage:</strong> ${props.Flood_Perc.toFixed(1)}%
+                        </div>`;
+                    layer.bindPopup(popupContent).openPopup();
+                }
+            });
+        }
+    });
+
+    if (layerCollection[layerName]) {
+        targetMap.removeLayer(layerCollection[layerName]);
+    }
+    layerCollection[layerName] = geoJsonLayer;
+    geoJsonLayer.addTo(targetMap);
+
+    if (addOpacitySliderToMap) {
+        addOpacitySliderToMap(targetMap, geoJsonLayer, layerName);
+    }
 }
 
 /**
