@@ -563,7 +563,7 @@ export function runFloodAnalysis(period) {
                         <h5>${feature.properties.name}</h5>
                         <p><strong>Status:</strong> <span class="text-danger">Currently Flooded</span></p>
                         <p><strong>Flooded Area:</strong> ${floodPercent}%</p>
-                        <p><strong>People Affected:</strong> ${popExposed}</p>
+                        
                         ${riskLevel !== 'unknown' ? `<p><strong>Pre-Flood Risk:</strong> <span style="color: ${riskColor}; font-weight: bold; text-transform: uppercase;">${riskLevel}</span></p>` : ''}
                         ${riskLevel === 'high' ? '<p class="text-danger"><small><strong>⚠️ CRITICAL PRIORITY AREA</strong></small></p>' : ''}
                       </div>
@@ -572,6 +572,7 @@ export function runFloodAnalysis(period) {
                     marker.addTo(duringFloodHotspotMarkers);
                   }
                 });
+                //<p><strong>People Affected:</strong> ${popExposed}</p>
                 
                 // Add during-flood hotspot markers to overlays and map
                 overlays['During-Flood Hotspots'] = duringFloodHotspotMarkers;
