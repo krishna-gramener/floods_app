@@ -923,9 +923,24 @@ function createPreFloodPanel(riskData) {
 
     <p>This analysis identifies areas at risk of flooding based on:</p>
     <ul class="list-unstyled ps-0">
-      <li class="mb-1"><i class="bi bi-graph-up me-2"></i>Elevation data</li>
-      <li class="mb-1"><i class="bi bi-people-fill me-2"></i>Population density</li>
-      <li class="mb-1"><i class="bi bi-droplet-fill me-2"></i>Historical water occurrence</li>
+      <li class="mb-1">
+        <i class="bi bi-layers-fill me-2"></i>Elevation Data
+      </li>
+      <li class="mb-1">
+        <i class="bi bi-people-fill me-2"></i>Population Density
+      </li>
+      <li class="mb-1">
+        <i class="bi bi-moisture me-2"></i>Topographic Wetness Index
+      </li>
+      <li class="mb-1">
+        <i class="bi bi-buildings-fill me-2"></i>Building Footprints
+      </li>
+      <li class="mb-1">
+        <i class="bi bi-distribute-vertical me-2"></i>Flow Accumulation
+      </li>
+      <li class="mb-1">
+        <i class="bi bi-tsunami me-2"></i>Historical Flood Occurrence
+      </li>
     </ul>
 
     <h6 class="mt-3 text-danger d-flex align-items-center">
