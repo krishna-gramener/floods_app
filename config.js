@@ -46,15 +46,15 @@ export const bekasiGeoJSON = {
 
 // Key Bekasi sub-areas
 export const bekasiAreas = {
-  'Bekasi Barat': [106.977, -6.217],
-  'Bekasi Timur': [107.010, -6.226],
-  'Bekasi Selatan': [106.995, -6.289],
-  'Bekasi Utara': [106.987, -6.167],
-  'Medan Satria': [106.943, -6.248],
-  'Jatiasih': [106.990, -6.324],
-  'Jatisampurna': [106.996, -6.242],
-  'Mustika Jaya': [107.004, -6.203],
-  'Bantar Gebang': [107.039, -6.213],
-  'Rawalumbu': [106.986, -6.270],
-  'Pondok Gede': [107.083, -6.301]
+  'Bekasi Barat': [106.9598, -6.2313],
+  'Villa jatiasih': [106.96186, -6.29368],
+  'Bekasi Selatan': [106.977552, -6.255393],
+  'Bekasi Utara': [107.000429, -6.205964],
+  'Medan Satria': [106.97222, -6.21192],
+  'Jatiasih': [106.95671, -6.29811],
+  'Jatisampurna': [106.9165, -6.3756],
+  'Mustika Jaya': [107.02881, -6.28354],
+  'Bantar Gebang': [106.98452, -6.31300],
+  'Bojong Rawalumbu': [106.996244, -6.280565],
+  'Duren jaya': [107.02057, -6.23599]
 };

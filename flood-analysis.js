@@ -696,7 +696,7 @@ export function runFloodAnalysis(period) {
           
           totalStats.floodArea.evaluate(function(floodArea) {
             totalStats.affectedPop.evaluate(function(affectedPop) {
-              hotspots.limit(3).evaluate(function(hotspotData) {
+              hotspots.limit(5).evaluate(function(hotspotData) {
                 document.getElementById('analysis-loader').classList.add('d-none');
                 
                 try {
